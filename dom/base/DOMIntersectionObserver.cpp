@@ -126,7 +126,11 @@ already_AddRefed<DOMIntersectionObserver> DOMIntersectionObserver::Constructor(
   // 4. Attempt to parse a margin from options.scrollMargin. If a list is
   // returned, set this’s internal [[scrollMargin]] slot to that. Otherwise,
   // throw a SyntaxError exception.
-  // TODO
+  if (!observer->SetRootMargin(aOptions.mScrollMargin)) {
+    aRv.ThrowSyntaxError(
+        "scrollMargin must be specified in pixels or percent.");
+    return nullptr;
+  }
 
   // 5. Let thresholds be a list equal to options.threshold.
   if (aOptions.mThreshold.IsDoubleSequence()) {
@@ -237,10 +241,18 @@ bool DOMIntersectionObserver::SetRootMargin(const nsACString& aString) {
   return Servo_IntersectionObserverMargin_Parse(&aString, &mRootMargin);
 }
 
+bool DOMIntersectionObserver::SetScrollMargin(const nsACString& aString) {
+  return Servo_IntersectionObserverMargin_Parse(&aString, &mScrollMargin);
+}
+
 nsISupports* DOMIntersectionObserver::GetParentObject() const { return mOwner; }
 
 void DOMIntersectionObserver::GetRootMargin(nsACString& aRetVal) {
   Servo_IntersectionObserverMargin_ToString(&mRootMargin, &aRetVal);
+}
+
+void DOMIntersectionObserver::GetScrollMargin(nsACString& aRetVal) {
+  Servo_IntersectionObserverMargin_ToString(&mScrollMargin, &aRetVal);
 }
 
 void DOMIntersectionObserver::GetThresholds(nsTArray<double>& aRetVal) {
@@ -400,7 +412,7 @@ static const Document* GetTopLevelContentDocumentInThisProcess(
 // in the out-of-process document's coordinate system.
 static Maybe<nsRect> ComputeTheIntersection(
     nsIFrame* aTarget, const nsRect& aTargetRectRelativeToTarget,
-    nsIFrame* aRoot, const nsRect& aRootBounds,
+    nsIFrame* aRoot, const nsRect& aRootBounds, const nsRect& aScrollMargin,
     const Maybe<nsRect>& aRemoteDocumentVisibleRect,
     DOMIntersectionObserver::IsForProximityToViewport
         aIsForProximityToViewport) {
@@ -452,7 +464,9 @@ static Maybe<nsRect> ComputeTheIntersection(
       // 3.3 If container is a scroll container, apply the
       // IntersectionObserver’s [[scrollMargin]] to the container’s clip rect as
       // described in apply scroll margin to a scrollport.
-      // TODO
+      if (containerFrame->IsScrollContainerOrSubclass()) {
+        intersectionRectRelativeToContainer.Inflate(aScrollMargin);
+      }
 
       intersectionRect =
           intersectionRectRelativeToContainer.EdgeInclusiveIntersection(
@@ -617,7 +631,8 @@ static Maybe<OopIframeMetrics> GetOopIframeMetrics(
 // step 2.1
 IntersectionInput DOMIntersectionObserver::ComputeInput(
     const Document& aDocument, const nsINode* aRoot,
-    const StyleRect<LengthPercentage>* aRootMargin) {
+    const StyleRect<LengthPercentage>* aRootMargin,
+    const StyleRect<LengthPercentage>* aScrollMargin) {
   // 1 - Let rootBounds be observer's root intersection rectangle.
   //  ... but since the intersection rectangle depends on the target, we defer
   //      the inflation until later.
@@ -701,8 +716,24 @@ IntersectionInput DOMIntersectionObserver::ComputeInput(
           basis, static_cast<nscoord (*)(float)>(NSToCoordRoundWithClamp));
     }
   }
-  return {isImplicitRoot, root,       rootFrame,
-          rootRect,       rootMargin, remoteDocumentVisibleRect};
+
+  nsMargin scrollMargin;
+  if (aScrollMargin) {
+    for (const auto side : mozilla::AllPhysicalSides()) {
+      nscoord basis = side == eSideTop || side == eSideBottom
+                          ? rootRect.Height()
+                          : rootRect.Width();
+      scrollMargin.Side(side) = aRootMargin->Get(side).Resolve(
+          basis, static_cast<nscoord (*)(float)>(NSToCoordRoundWithClamp));
+    }
+  }
+  return {isImplicitRoot,
+          root,
+          rootFrame,
+          rootRect,
+          rootMargin,
+          scrollMargin,
+          remoteDocumentVisibleRect};
 }
 
 // https://w3c.github.io/IntersectionObserver/#update-intersection-observations-algo
@@ -789,7 +820,8 @@ IntersectionOutput DOMIntersectionObserver::Intersect(
   // intersection algorithm on target and observer’s intersection root.
   Maybe<nsRect> intersectionRect = ComputeTheIntersection(
       targetFrame, targetRectRelativeToTarget, aInput.mRootFrame, rootBounds,
-      aInput.mRemoteDocumentVisibleRect, aIsForProximityToViewport);
+      aInput.mScrollMargin, aInput.mRemoteDocumentVisibleRect,
+      aIsForProximityToViewport);
 
   return {isSimilarOrigin, rootBounds, targetRect, intersectionRect};
 }
@@ -811,7 +843,7 @@ IntersectionOutput DOMIntersectionObserver::Intersect(
 // (step 2)
 void DOMIntersectionObserver::Update(Document& aDocument,
                                      DOMHighResTimeStamp time) {
-  auto input = ComputeInput(aDocument, mRoot, &mRootMargin);
+  auto input = ComputeInput(aDocument, mRoot, &mRootMargin, &mScrollMargin);
 
   // 2. For each target in observer’s internal [[ObservationTargets]] slot,
   // processed in the same order that observe() was called on each target:
