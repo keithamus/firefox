@@ -314,12 +314,16 @@ void HTMLDialogElement::Show(ErrorResult& aError) {
 
   // 9. Let hideUntil be the result of running topmost popover ancestor given
   // this, document's showing hint popover list, null, and false.
-  RefPtr<nsINode> hideUntil = GetTopmostPopoverAncestor(nullptr, false);
+  RefPtr<nsINode> hideUntil = GetTopmostPopoverAncestor(
+      nullptr, OwnerDoc()->PopoverListOf(PopoverOpenedInMode::Hint), false);
 
   // 10. If hideUntil is null, then set hideUntil to the result of running
   // topmost popover ancestor given this, document's showing auto popover list,
   // null, and false.
-  // TODO(keithamus): Popover hint
+  if (!hideUntil) {
+    hideUntil = GetTopmostPopoverAncestor(
+        nullptr, OwnerDoc()->PopoverListOf(PopoverOpenedInMode::Auto), false);
+  }
 
   // 11. If hideUntil is null, then set hideUntil to document.
   if (!hideUntil) {
@@ -492,12 +496,16 @@ void HTMLDialogElement::ShowModal(Element* aSource, ErrorResult& aError) {
 
   // 18. Let hideUntil be the result of running topmost popover ancestor given
   // subject, document's showing hint popover list, null, and false.
-  RefPtr<nsINode> hideUntil = GetTopmostPopoverAncestor(nullptr, false);
+  RefPtr<nsINode> hideUntil = GetTopmostPopoverAncestor(
+      nullptr, OwnerDoc()->PopoverListOf(PopoverOpenedInMode::Hint), false);
 
   // 19. If hideUntil is null, then set hideUntil to the result of running
   // topmost popover ancestor given subject, document's showing auto popover
   // list, null, and false.
-  // TODO(keithamus): Popover hint
+  if (!hideUntil) {
+    hideUntil = GetTopmostPopoverAncestor(
+        nullptr, OwnerDoc()->PopoverListOf(PopoverOpenedInMode::Auto), false);
+  }
 
   // 20. If hideUntil is null, then set hideUntil to document.
   if (!hideUntil) {

@@ -4994,10 +4994,22 @@ void Element::ClearServoData(Document* aDoc) {
   }
 }
 
-bool Element::IsAutoPopover() const {
+bool Element::IsOpenedInMode(PopoverOpenedInMode aOpenedInMode) const {
   const auto* htmlElement = nsGenericHTMLElement::FromNode(this);
-  return htmlElement &&
-         htmlElement->GetPopoverAttributeState() == PopoverAttributeState::Auto;
+  if (!htmlElement || !htmlElement->GetPopoverData()) {
+    return false;
+  }
+  return htmlElement->GetPopoverData()->GetOpenedInMode() == aOpenedInMode;
+}
+
+bool Element::IsOpenedAutoOrHintPopover() const {
+  const auto* htmlElement = nsGenericHTMLElement::FromNode(this);
+  if (!htmlElement || !htmlElement->GetPopoverData()) {
+    return false;
+  }
+  const auto openedInMode = htmlElement->GetPopoverData()->GetOpenedInMode();
+  return openedInMode == PopoverOpenedInMode::Auto ||
+         openedInMode == PopoverOpenedInMode::Hint;
 }
 
 bool Element::IsPopoverOpen() const {
@@ -5026,12 +5038,13 @@ nsGenericHTMLElement* Element::GetAssociatedPopover() const {
 }
 
 Element* Element::GetTopmostPopoverAncestor(const Element* aInvoker,
+                                            nsTArray<Element*> aPopoverList,
                                             bool isPopover) const {
   const Element* newPopover = this;
 
   nsTHashMap<nsPtrHashKey<const Element>, size_t> popoverPositions;
   size_t index = 0;
-  for (Element* popover : OwnerDoc()->AutoPopoverList()) {
+  for (Element* popover : aPopoverList) {
     popoverPositions.LookupOrInsert(popover, index++);
   }
 

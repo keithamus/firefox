@@ -23,6 +23,13 @@ enum class PopoverAttributeState : uint8_t {
   None,
   Auto,    ///< https://html.spec.whatwg.org/#attr-popover-auto-state
   Manual,  ///< https://html.spec.whatwg.org/#attr-popover-manual-state
+  Hint,    ///< https://github.com/whatwg/html/pull/9778
+};
+
+enum class PopoverOpenedInMode : uint8_t {
+  None,
+  Auto,
+  Hint,
 };
 
 enum class PopoverVisibilityState : uint8_t {
@@ -60,6 +67,10 @@ class PopoverData {
 
   PopoverAttributeState GetPopoverAttributeState() const { return mState; }
   void SetPopoverAttributeState(PopoverAttributeState aState) {
+    if (aState == PopoverAttributeState::Hint) {
+      MOZ_ASSERT(StaticPrefs::dom_element_popoverhint_enabled(),
+                 "Tried to set popover hint without feature enabled");
+    }
     mState = aState;
   }
 
@@ -68,6 +79,11 @@ class PopoverData {
   }
   void SetPopoverVisibilityState(PopoverVisibilityState aVisibilityState) {
     mVisibilityState = aVisibilityState;
+  }
+
+  PopoverOpenedInMode GetOpenedInMode() const { return mPopoverOpenedInMode; }
+  void SetOpenedInMode(PopoverOpenedInMode aOpenedInMode) {
+    mPopoverOpenedInMode = aOpenedInMode;
   }
 
   nsWeakPtr GetPreviouslyFocusedElement() const {
@@ -97,6 +113,7 @@ class PopoverData {
  private:
   PopoverVisibilityState mVisibilityState = PopoverVisibilityState::Hidden;
   PopoverAttributeState mState = PopoverAttributeState::None;
+  PopoverOpenedInMode mPopoverOpenedInMode = PopoverOpenedInMode::None;
   // Popover and dialog don't share mPreviouslyFocusedElement for there are
   // chances to lose the previously focused element.
   // See, https://github.com/whatwg/html/issues/9063

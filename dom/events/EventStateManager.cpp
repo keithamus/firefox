@@ -1527,7 +1527,8 @@ void EventStateManager::LightDismissOpenPopovers(WidgetEvent* aEvent,
     return;
   }
 
-  Element* topmostPopover = aTargetContent->OwnerDoc()->GetTopmostAutoPopover();
+  Element* topmostPopover =
+      aTargetContent->OwnerDoc()->GetTopmostAutoOrHintPopover();
   if (!topmostPopover) {
     return;
   }
