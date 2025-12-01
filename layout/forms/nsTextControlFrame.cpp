@@ -53,7 +53,7 @@ NS_IMPL_FRAMEARENA_HELPERS(nsTextControlFrame)
 NS_QUERYFRAME_HEAD(nsTextControlFrame)
   NS_QUERYFRAME_ENTRY(nsTextControlFrame)
   NS_QUERYFRAME_ENTRY(nsIStatefulFrame)
-NS_QUERYFRAME_TAIL_INHERITING(nsContainerFrame)
+NS_QUERYFRAME_TAIL_INHERITING(nsBlockFrame)
 
 #ifdef ACCESSIBILITY
 a11y::AccType nsTextControlFrame::AccessibleType() {
@@ -67,7 +67,7 @@ a11y::AccType nsTextControlFrame::AccessibleType() {
 nsTextControlFrame::nsTextControlFrame(ComputedStyle* aStyle,
                                        nsPresContext* aPresContext,
                                        nsIFrame::ClassID aClassID)
-    : nsContainerFrame(aStyle, aPresContext, aClassID) {}
+    : nsBlockFrame(aStyle, aPresContext, aClassID) {}
 
 nsTextControlFrame::~nsTextControlFrame() = default;
 
@@ -83,7 +83,7 @@ void nsTextControlFrame::Destroy(DestroyContext& aContext) {
   if (auto* ts = ControlElement()->GetTextControlState()) {
     ts->DeinitSelection();
   }
-  nsContainerFrame::Destroy(aContext);
+  nsBlockFrame::Destroy(aContext);
 }
 
 LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
@@ -166,11 +166,6 @@ LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
   }
 
   return intrinsicSize;
-}
-
-void nsTextControlFrame::Init(nsIContent* aContent, nsContainerFrame* aParent,
-                              nsIFrame* aPrevInFlow) {
-  nsContainerFrame::Init(aContent, aParent, aPrevInFlow);
 }
 
 nscoord nsTextControlFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
@@ -390,7 +385,7 @@ void nsTextControlFrame::ElementStateChanged(dom::ElementState aStates) {
                                     dom::ElementState::DISABLED)) {
     HandleReadonlyOrDisabledChange();
   }
-  return nsContainerFrame::ElementStateChanged(aStates);
+  return nsBlockFrame::ElementStateChanged(aStates);
 }
 
 /// END NSIFRAME OVERLOADS
@@ -411,7 +406,7 @@ static nsIFrame* FindRootNodeFrame(const nsFrameList& aChildList,
 }
 void nsTextControlFrame::SetInitialChildList(ChildListID aListID,
                                              nsFrameList&& aChildList) {
-  nsContainerFrame::SetInitialChildList(aListID, std::move(aChildList));
+  nsBlockFrame::SetInitialChildList(aListID, std::move(aChildList));
   if (aListID != FrameChildListID::Principal) {
     return;
   }

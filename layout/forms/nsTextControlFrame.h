@@ -7,7 +7,7 @@
 
 #include "mozilla/Attributes.h"
 #include "mozilla/TextControlElement.h"
-#include "nsContainerFrame.h"
+#include "nsBlockFrame.h"
 #include "nsIContent.h"
 #include "nsIStatefulFrame.h"
 
@@ -19,7 +19,7 @@ class Element;
 }  // namespace dom
 }  // namespace mozilla
 
-class nsTextControlFrame : public nsContainerFrame, public nsIStatefulFrame {
+class nsTextControlFrame : public nsBlockFrame, public nsIStatefulFrame {
   using Element = mozilla::dom::Element;
 
  public:
@@ -59,10 +59,6 @@ class nsTextControlFrame : public nsContainerFrame, public nsIStatefulFrame {
   Maybe<nscoord> GetNaturalBaselineBOffset(
       mozilla::WritingMode aWM, BaselineSharingGroup aBaselineGroup,
       BaselineExportContext aExportContext) const override;
-
-  BaselineSharingGroup GetDefaultBaselineSharingGroup() const override {
-    return BaselineSharingGroup::Last;
-  }
 
   static Maybe<nscoord> GetSingleLineTextControlBaseline(
       const nsIFrame* aFrame, nscoord aFirstBaseline, mozilla::WritingMode aWM,
@@ -173,9 +169,6 @@ class nsTextControlFrame : public nsContainerFrame, public nsIStatefulFrame {
   // for <textarea>).
   mozilla::LogicalSize CalcIntrinsicSize(gfxContext* aRenderingContext,
                                          mozilla::WritingMode aWM) const;
-
-  void Init(nsIContent* aContent, nsContainerFrame* aParent,
-            nsIFrame* aPrevInFlow) override;
 
   // Our first baseline, or NS_INTRINSIC_ISIZE_UNKNOWN if we have a pending
   // Reflow (or if we're contain:layout, which means we have no baseline).
