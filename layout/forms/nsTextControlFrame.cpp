@@ -78,6 +78,27 @@ static void SetFieldSizingReflowBits(nsIFrame* aFrame,
   }
 }
 
+struct FieldSizingFrames {
+  nsIFrame* mRoot = nullptr;
+  nsIFrame* mPlaceholder = nullptr;
+};
+
+static FieldSizingFrames GetFieldSizingFrames(
+    const nsTextControlFrame* aFrame) {
+  const nsFrameList& childList = aFrame->PrincipalChildList();
+  FieldSizingFrames result;
+  if (Element* root = aFrame->GetRootNode()) {
+    result.mRoot = FindRootNodeFrame(childList, root);
+  }
+  if (aFrame->ControlElement()->State().HasState(
+          dom::ElementState::PLACEHOLDER_SHOWN)) {
+    if (Element* placeholder = aFrame->GetPlaceholderNode()) {
+      result.mPlaceholder = FindRootNodeFrame(childList, placeholder);
+    }
+  }
+  return result;
+}
+
 nsTextControlFrame::nsTextControlFrame(ComputedStyle* aStyle,
                                        nsPresContext* aPresContext,
                                        nsIFrame::ClassID aClassID)
@@ -117,6 +138,42 @@ void nsTextControlFrame::Destroy(DestroyContext& aContext) {
     ts->DeinitSelection();
   }
   nsBlockFrame::Destroy(aContext);
+}
+
+static nscoord GetCaretWidth(const nsTextControlFrame* aFrame) {
+  const float inflation = nsLayoutUtils::FontSizeInflationFor(aFrame);
+  RefPtr<nsFontMetrics> fontMet =
+      nsLayoutUtils::GetFontMetricsForFrame(aFrame, inflation);
+  return fontMet->ZeroOrAveCharWidth();
+}
+
+static nscoord GetLineHeight(const ComputedStyle* aStyle,
+                             nsPresContext* aPresContext, nsIContent* aContent,
+                             const nsIFrame* aFrame) {
+  const float inflation = nsLayoutUtils::FontSizeInflationFor(aFrame);
+  return ReflowInput::CalcLineHeight(*aStyle, aPresContext, aContent,
+                                     NS_UNCONSTRAINEDSIZE, inflation);
+}
+
+template <typename SizeFn>
+static nscoord ComputeFieldSizingISize(const nsTextControlFrame* aFrame,
+                                       const IntrinsicSizeInput& aInput,
+                                       SizeFn aSizeFn) {
+  const auto frames = GetFieldSizingFrames(aFrame);
+  nscoord iSize = 0;
+
+  if (frames.mRoot) {
+    iSize = aSizeFn(frames.mRoot, aInput);
+  }
+  if (frames.mPlaceholder) {
+    iSize = std::max(iSize, aSizeFn(frames.mPlaceholder, aInput));
+  }
+
+  if (iSize == 0) {
+    iSize = GetCaretWidth(aFrame);
+  }
+
+  return iSize;
 }
 
 LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
@@ -203,8 +260,14 @@ LogicalSize nsTextControlFrame::CalcIntrinsicSize(gfxContext* aRenderingContext,
 
 nscoord nsTextControlFrame::IntrinsicISize(const IntrinsicSizeInput& aInput,
                                            IntrinsicISizeType aType) {
-  // Our min inline size is just our preferred inline-size if we have auto
-  // inline size.
+  if (StyleUIReset()->mFieldSizing == StyleFieldSizing::Content) {
+    return ComputeFieldSizingISize(
+        this, aInput, [aType](nsIFrame* aFrame, const IntrinsicSizeInput& i) {
+          return aType == IntrinsicISizeType::MinISize
+                     ? aFrame->GetMinISize(i)
+                     : aFrame->GetPrefISize(i);
+        });
+  }
   WritingMode wm = GetWritingMode();
   return CalcIntrinsicSize(aInput.mContext, wm).ISize(wm);
 }
@@ -437,6 +500,7 @@ static nsIFrame* FindRootNodeFrame(const nsFrameList& aChildList,
   }
   return nullptr;
 }
+
 void nsTextControlFrame::SetInitialChildList(ChildListID aListID,
                                              nsFrameList&& aChildList) {
   nsBlockFrame::SetInitialChildList(aListID, std::move(aChildList));
