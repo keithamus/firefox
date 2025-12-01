@@ -47,6 +47,8 @@ class nsTextControlFrame : public nsBlockFrame, public nsIStatefulFrame {
    */
   MOZ_CAN_RUN_SCRIPT_BOUNDARY void Destroy(DestroyContext&) override;
 
+  void DidSetComputedStyle(ComputedStyle* aOldComputedStyle) override;
+
   mozilla::ScrollContainerFrame* GetScrollTargetFrame() const override;
 
   nscoord IntrinsicISize(const mozilla::IntrinsicSizeInput& aInput,

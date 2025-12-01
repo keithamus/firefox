@@ -64,12 +64,45 @@ a11y::AccType nsTextControlFrame::AccessibleType() {
 }
 #endif
 
+static nsIFrame* FindRootNodeFrame(const nsFrameList& aChildList,
+                                   const nsIContent* aRoot);
+
+static void SetFieldSizingReflowBits(nsIFrame* aFrame,
+                                     bool aIsFieldSizingContent) {
+  if (aIsFieldSizingContent) {
+    aFrame->RemoveStateBits(NS_FRAME_REFLOW_ROOT);
+    aFrame->AddStateBits(NS_FRAME_DYNAMIC_REFLOW_ROOT);
+  } else {
+    aFrame->RemoveStateBits(NS_FRAME_DYNAMIC_REFLOW_ROOT);
+    aFrame->AddStateBits(NS_FRAME_REFLOW_ROOT);
+  }
+}
+
 nsTextControlFrame::nsTextControlFrame(ComputedStyle* aStyle,
                                        nsPresContext* aPresContext,
                                        nsIFrame::ClassID aClassID)
     : nsBlockFrame(aStyle, aPresContext, aClassID) {}
 
 nsTextControlFrame::~nsTextControlFrame() = default;
+
+void nsTextControlFrame::DidSetComputedStyle(ComputedStyle* aOldComputedStyle) {
+  nsBlockFrame::DidSetComputedStyle(aOldComputedStyle);
+
+  const bool isContent =
+      StyleUIReset()->mFieldSizing == StyleFieldSizing::Content;
+  const bool wasContent =
+      aOldComputedStyle && aOldComputedStyle->StyleUIReset()->mFieldSizing ==
+                               StyleFieldSizing::Content;
+
+  SetFieldSizingReflowBits(this, isContent);
+
+  if (isContent != wasContent) {
+    if (nsIFrame* frame =
+            FindRootNodeFrame(PrincipalChildList(), GetRootNode())) {
+      SetFieldSizingReflowBits(frame, isContent);
+    }
+  }
+}
 
 ScrollContainerFrame* nsTextControlFrame::GetScrollTargetFrame() const {
   auto* root = GetRootNode();
@@ -416,7 +449,8 @@ void nsTextControlFrame::SetInitialChildList(ChildListID aListID,
   // the root frame of the frame hierarchy.
   if (nsIFrame* frame =
           FindRootNodeFrame(PrincipalChildList(), GetRootNode())) {
-    frame->AddStateBits(NS_FRAME_REFLOW_ROOT);
+    SetFieldSizingReflowBits(
+        frame, StyleUIReset()->mFieldSizing == StyleFieldSizing::Content);
 
     if (auto* ts = ControlElement()->GetTextControlState()) {
       ts->InitializeSelection(PresShell());
