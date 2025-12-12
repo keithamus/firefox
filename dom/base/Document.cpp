@@ -16074,13 +16074,16 @@ void Document::CloseEntirePopoverList(bool aFocusPreviousElement,
 void Document::HideAllPopoversUntil(nsINode& aEndpoint,
                                     bool aFocusPreviousElement,
                                     bool aFireEvents) {
+  const auto* endpointHTMLEl = nsGenericHTMLElement::FromNodeOrNull(&aEndpoint);
+
   // 1. If endpoint is an HTML element and endpoint is not in the popover
   // showing state, then return.
-  if (aEndpoint.IsElement() && !aEndpoint.AsElement()->IsPopoverOpen()) {
+  if (endpointHTMLEl && !endpointHTMLEl->IsPopoverOpen()) {
     return;
   }
 
   // 2. Let document be endpoint's node document.
+  MOZ_ASSERT(aEndpoint.OwnerDoc() == this);
   // 3. Assert: endpoint is a Document or endpoint's popover visibility state is
   // showing.
   // 4. Assert: endpoint is a Document or endpoint's popover attribute is in the
