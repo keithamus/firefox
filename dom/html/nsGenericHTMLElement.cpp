@@ -3486,7 +3486,8 @@ void nsGenericHTMLElement::ShowPopoverInternal(Element* aSource,
     // 16.2. Let ancestor be the result of running the topmost popover ancestor
     // algorithm given element, document's showing auto popover list, source,
     // and true.
-    RefPtr<nsINode> ancestor = GetTopmostPopoverAncestor(aSource, true);
+    RefPtr<nsINode> ancestor =
+        GetTopmostPopoverAncestor(PopoverAttributeState::Auto, aSource, true);
 
     // 16.3. If ancestor is null, then set ancestor to document.
     if (!ancestor) {
@@ -3551,7 +3552,8 @@ void nsGenericHTMLElement::ShowPopoverInternal(Element* aSource,
     if (stackToAppendTo == PopoverAttributeState::Auto) {
       // 18.5.1. Assert: document's showing auto popover list does not contain
       // element.
-      MOZ_ASSERT(!document->AutoPopoverList().Contains(this));
+      MOZ_ASSERT(
+          !document->PopoverListOf(PopoverAttributeState::Auto).Contains(this));
 
       // 18.5.2. Set element's opened in popover mode to "auto".
       GetPopoverData()->SetOpenedInMode(PopoverAttributeState::Auto);
