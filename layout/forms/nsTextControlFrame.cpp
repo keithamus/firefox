@@ -292,6 +292,59 @@ Maybe<nscoord> nsTextControlFrame::ComputeBaseline(
               aReflowInput.ComputedLogicalBorderPadding(wm).BStart(wm));
 }
 
+nscoord nsTextControlFrame::ComputeFieldSizingBSize(
+    nsPresContext* aPresContext, const ReflowInput& aReflowInput) const {
+  WritingMode wm = aReflowInput.GetWritingMode();
+  nscoord textControlLineHeight =
+      GetLineHeight(Style(), PresContext(), GetContent(), this);
+
+  if (!IsTextArea()) {
+    const auto frames = GetFieldSizingFrames(this);
+    nscoord bSize = textControlLineHeight;
+    if (frames.mPlaceholder) {
+      bSize = std::max(
+          bSize, GetLineHeight(frames.mPlaceholder->Style(), PresContext(),
+                               frames.mPlaceholder->GetContent(),
+                               frames.mPlaceholder));
+    }
+    return bSize;
+  }
+
+  const auto frames = GetFieldSizingFrames(this);
+  nsIFrame* frame = frames.mPlaceholder ? frames.mPlaceholder : frames.mRoot;
+  if (!frame) {
+    return textControlLineHeight;
+  }
+
+  const bool isPlaceholder = frames.mPlaceholder != nullptr;
+  nscoord iSize = aReflowInput.ComputedISize();
+  const auto anchorParams = AnchorPosResolutionParams::From(&aReflowInput);
+  const auto styleISize = aReflowInput.mStylePosition->ISize(wm, anchorParams);
+  if (isPlaceholder && styleISize->IsAuto()) {
+    iSize = NS_UNCONSTRAINEDSIZE;
+  }
+
+  LogicalSize availSize(wm, iSize, NS_UNCONSTRAINEDSIZE);
+  ReflowInput measureReflowInput(aPresContext, aReflowInput, frame, availSize);
+  ReflowOutput measureOutput(wm);
+  nsReflowStatus measureStatus;
+  frame->Reflow(aPresContext, measureOutput, measureReflowInput, measureStatus);
+
+  nscoord result = measureOutput.BSize(wm);
+
+  nscoord lineHeight =
+      GetLineHeight(frame->Style(), PresContext(), frame->GetContent(), frame);
+  lineHeight = std::max(lineHeight, textControlLineHeight);
+
+  if (isPlaceholder) {
+    const auto& padding = aReflowInput.ComputedLogicalPadding(wm);
+    lineHeight += padding.BStartEnd(wm);
+    result += padding.BStartEnd(wm);
+  }
+
+  return std::max(result, lineHeight);
+}
+
 void nsTextControlFrame::Reflow(nsPresContext* aPresContext,
                                 ReflowOutput& aDesiredSize,
                                 const ReflowInput& aReflowInput,
@@ -303,6 +356,9 @@ void nsTextControlFrame::Reflow(nsPresContext* aPresContext,
   // set values of reflow's out parameters
   WritingMode wm = aReflowInput.GetWritingMode();
   const auto contentBoxSize = aReflowInput.ComputedSizeWithBSizeFallback([&] {
+    if (StyleUIReset()->mFieldSizing == StyleFieldSizing::Content) {
+      return ComputeFieldSizingBSize(aPresContext, aReflowInput);
+    }
     return CalcIntrinsicSize(aReflowInput.mRenderingContext, wm).BSize(wm);
   });
   aDesiredSize.SetSize(

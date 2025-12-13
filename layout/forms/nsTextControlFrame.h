@@ -123,6 +123,9 @@ class nsTextControlFrame : public nsBlockFrame, public nsIStatefulFrame {
                               const mozilla::LogicalSize& aParentContentBoxSize,
                               nscoord& aButtonBoxISize);
 
+  nscoord ComputeFieldSizingBSize(nsPresContext* aPresContext,
+                                  const ReflowInput& aReflowInput) const;
+
  public:
   static Maybe<nscoord> ComputeBaseline(const nsIFrame*, const ReflowInput&,
                                         bool aForSingleLineControl);

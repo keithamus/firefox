@@ -141,5 +141,16 @@ test(() => {
    assert_less_than(element.offsetWidth, w);
    assert_less_than(element.offsetHeight, h);
 }, 'Update field-sizing property dynamically');
+
+test(() => {
+  let pair = addElements('<textarea style="width:20ch">A</textarea>');
+  const singleLineHeight = pair.content.offsetHeight;
+  pair = addElements('<textarea style="width:20ch">A\nB\nC</textarea>');
+  // With explicit width and 3 short lines, height should accommodate all lines.
+  // 1.5x height is a conservative threshold
+  assert_greater_than(pair.content.offsetHeight, singleLineHeight * 1.5,
+    'Three short lines with explicit breaks should be taller than 1.5 lines');
+}, 'Multiple short lines with explicit line breaks');
+
 </script>
 </body>
