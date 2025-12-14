@@ -3616,10 +3616,10 @@ class Document : public nsINode,
   // See https://html.spec.whatwg.org/#showing-hint-popover-list
   nsTArray<Element*> PopoverListOf(PopoverAttributeState aMode) const;
 
-  // Return document's auto popover list's last element.
+  // Return the topmost auto or hint popover.
   // See
-  // https://html.spec.whatwg.org/multipage/popover.html#topmost-auto-popover
-  Element* GetTopmostAutoPopover() const;
+  // https://html.spec.whatwg.org/multipage/popover.html#topmost-auto-or-hint-popover
+  Element* GetTopmostAutoOrHintPopover() const;
 
   void AddPopoverToTopLayer(Element&);
   void RemovePopoverFromTopLayer(Element&);
