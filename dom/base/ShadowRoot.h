@@ -114,7 +114,8 @@ class ShadowRoot final : public DocumentFragment, public DocumentOrShadowRoot {
              Element::DelegatesFocus aDelegatesFocus,
              SlotAssignmentMode aSlotAssignment, IsClonable aClonable,
              IsSerializable aIsSerializable, Declarative aDeclarative,
-             already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo);
+             already_AddRefed<mozilla::dom::NodeInfo>&& aNodeInfo,
+             CustomElementRegistry* aRegistry = nullptr);
 
   void AddSizeOfExcludingThis(nsWindowSizes&, size_t* aNodeSize) const final;
 

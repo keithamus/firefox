@@ -760,18 +760,30 @@ void DocumentOrShadowRoot::Unlink(DocumentOrShadowRoot* tmp) {
 void DocumentOrShadowRoot::SetCustomElementRegistry(
     CustomElementRegistry& aRegistry) {
   MOZ_ASSERT(StaticPrefs::dom_scoped_custom_element_registries_enabled());
-  MOZ_ASSERT(mKind == Kind::ShadowRoot,
-             "SetCustomElementRegistry should only be called on ShadowRoots");
-  ShadowRoot& root = static_cast<ShadowRoot&>(AsNode());
-  root.SetCustomElementRegistry(&aRegistry);
+  if (mKind == Kind::ShadowRoot) {
+    ShadowRoot& root = static_cast<ShadowRoot&>(AsNode());
+    root.SetCustomElementRegistry(&aRegistry);
+    return;
+  }
+  // For Document, store the registry in the global scoped registry map.
+  MOZ_ASSERT(mKind == Kind::Document);
+  MOZ_ASSERT(!RefPtr(CustomElementRegistry::GetScopedRegistry(AsNode())),
+             "Document already has an assigned custom element registry");
+  CustomElementRegistry::SetScopedRegistry(AsNode(), aRegistry);
 }
 
 /* https://dom.spec.whatwg.org/#dom-documentorshadowroot-customelementregistry
  */
 CustomElementRegistry* DocumentOrShadowRoot::GetCustomElementRegistry() {
   // Step 1. If this is a document, then return this's custom element registry.
-  // TODO(2021247): Per document registries
   if (mKind == Kind::Document) {
+    if (StaticPrefs::dom_scoped_custom_element_registries_enabled()) {
+      RefPtr<CustomElementRegistry> registry =
+          CustomElementRegistry::GetScopedRegistry(AsNode());
+      if (registry) {
+        return registry;
+      }
+    }
     Document* doc = AsNode().AsDocument();
     nsPIDOMWindowInner* window = doc->GetInnerWindow();
     if (!window) {

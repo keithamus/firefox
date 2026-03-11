@@ -13108,6 +13108,16 @@ nsIContent* nsContentUtils::AttachDeclarativeShadowRoot(
   init.mSlotAssignment = SlotAssignmentMode::Named;
   init.mClonable = aIsClonable;
   init.mSerializable = aIsSerializable;
+  // https://html.spec.whatwg.org/#current-template-insertion-mode
+  // "Let registry be null if templateStartTag has a
+  // shadowrootcustomelementregistry attribute; otherwise
+  // declarativeShadowHostElement's node document's custom element registry."
+  // XXX: The 'otherwise' case falls through to doc registry, which is the
+  //      default case, so we don't need any additional logic for this.
+  if (aCustomElementRegistry &&
+      StaticPrefs::dom_scoped_custom_element_registries_enabled()) {
+    init.mCustomElementRegistry.Construct(nullptr);
+  }
 
   RefPtr shadowRoot = host->AttachShadow(init, IgnoreErrors());
   if (shadowRoot) {

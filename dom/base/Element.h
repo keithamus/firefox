@@ -1635,7 +1635,8 @@ class Element : public FragmentOrElement {
 
   // https://dom.spec.whatwg.org/#concept-attach-a-shadow-root
   already_AddRefed<ShadowRoot> AttachShadowWithoutNameChecks(
-      const ShadowRootInit&, bool aNotify = true);
+      const ShadowRootInit&, bool aNotify = true,
+      const Maybe<CustomElementRegistry*>& aRegistry = Nothing());
 
   // Attach UA Shadow Root if it is not attached.
   enum class NotifyUAWidget : bool { No, Yes };
