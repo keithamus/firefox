@@ -1176,6 +1176,7 @@ STATIC_ATOMS = [
     Atom("section", "section"),
     Atom("select", "select"),
     Atom("selected", "selected"),
+    Atom("selectedcontent", "selectedcontent"),
     Atom("selectedIndex", "selectedIndex"),
     Atom("selectedindex", "selectedindex"),
     Atom("selectmenu", "selectmenu"),

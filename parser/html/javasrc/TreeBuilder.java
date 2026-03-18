@@ -200,6 +200,8 @@ public abstract class TreeBuilder<T> implements TokenHandler,
 
     final static int IMG = 67;
 
+    final static int SELECTEDCONTENT = 68;
+
     // start insertion modes
 
     private static final int IN_ROW = 0;

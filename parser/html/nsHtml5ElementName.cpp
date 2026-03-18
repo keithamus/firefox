@@ -256,6 +256,7 @@ nsHtml5ElementName* nsHtml5ElementName::ELT_TT = nullptr;
 nsHtml5ElementName* nsHtml5ElementName::ELT_RECT = nullptr;
 nsHtml5ElementName* nsHtml5ElementName::ELT_RADIALGRADIENT = nullptr;
 nsHtml5ElementName* nsHtml5ElementName::ELT_SELECT = nullptr;
+nsHtml5ElementName* nsHtml5ElementName::ELT_SELECTEDCONTENT = nullptr;
 nsHtml5ElementName* nsHtml5ElementName::ELT_SLOT = nullptr;
 nsHtml5ElementName* nsHtml5ElementName::ELT_SCRIPT = nullptr;
 nsHtml5ElementName* nsHtml5ElementName::ELT_TFOOT = nullptr;
@@ -1009,6 +1010,10 @@ void nsHtml5ElementName::initializeStatics() {
   ELT_SELECT = new nsHtml5ElementName(
       nsGkAtoms::select, nsGkAtoms::select, NS_NewHTMLSelectElement,
       NS_NewSVGUnknownElement, nsHtml5TreeBuilder::SELECT | SPECIAL | SCOPING);
+  ELT_SELECTEDCONTENT = new nsHtml5ElementName(
+      nsGkAtoms::selectedcontent, nsGkAtoms::selectedcontent,
+      NS_NewHTMLSelectedContentElement, NS_NewSVGUnknownElement,
+      nsHtml5TreeBuilder::SELECTEDCONTENT);
   ELT_SLOT = new nsHtml5ElementName(
       nsGkAtoms::slot, nsGkAtoms::slot, NS_NewHTMLSlotElement,
       NS_NewSVGUnknownElement, nsHtml5TreeBuilder::OTHER);
@@ -1470,6 +1475,7 @@ void nsHtml5ElementName::releaseStatics() {
   delete ELT_RECT;
   delete ELT_RADIALGRADIENT;
   delete ELT_SELECT;
+  delete ELT_SELECTEDCONTENT;
   delete ELT_SLOT;
   delete ELT_SCRIPT;
   delete ELT_TFOOT;

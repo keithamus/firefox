@@ -141,6 +141,7 @@ static const HTMLElement gHTMLElements[] = {
   ELEM(search,      true, true)
   ELEM(section,     true, true)
   ELEM(select,      ____, true)
+  ELEM(selectedcontent,____, true)
   ELEM(small,       ____, true)
   ELEM(slot,        ____, true)
   ELEM(source,      ____, ____)

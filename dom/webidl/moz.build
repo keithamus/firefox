@@ -711,6 +711,7 @@ WEBIDL_FILES = [
     "HTMLProgressElement.webidl",
     "HTMLQuoteElement.webidl",
     "HTMLScriptElement.webidl",
+    "HTMLSelectedContentElement.webidl",
     "HTMLSelectElement.webidl",
     "HTMLSlotElement.webidl",
     "HTMLSourceElement.webidl",

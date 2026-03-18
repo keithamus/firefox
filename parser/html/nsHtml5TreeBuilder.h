@@ -205,6 +205,8 @@ class nsHtml5TreeBuilder : public nsAHtml5TreeBuilderState {
 
   static const int32_t IMG = 67;
 
+  static const int32_t SELECTEDCONTENT = 68;
+
  private:
   static const int32_t IN_ROW = 0;
 
