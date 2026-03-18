@@ -4037,6 +4037,13 @@ pub mod tests {
         ) -> Result<PseudoElement, SelectorParseError<'i>> {
             match_ignore_ascii_case! { &name,
                 "highlight" => return Ok(PseudoElement::Highlight(parser.expect_ident()?.as_ref().to_owned())),
+                "picker" => {
+                    let ident = parser.expect_ident()?.as_ref();
+                    match_ignore_ascii_case! { &ident,
+                        "select" => return Ok(PseudoElement::Picker(AtomIdent::from(ident))),
+                        _ => {}
+                    }
+                },
                 _ => {}
             }
             Err(
