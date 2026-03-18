@@ -17,11 +17,13 @@
 #include "mozilla/StaticPrefs_ui.h"
 #include "mozilla/TextEvents.h"
 #include "mozilla/dom/Document.h"
+#include "mozilla/dom/DocumentFragment.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/FormData.h"
 #include "mozilla/dom/HTMLOptGroupElement.h"
 #include "mozilla/dom/HTMLOptionElement.h"
 #include "mozilla/dom/HTMLSelectElementBinding.h"
+#include "mozilla/dom/HTMLSelectedContentElement.h"
 #include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/dom/UnionTypes.h"
 #include "mozilla/dom/WindowGlobalChild.h"
@@ -2366,6 +2368,128 @@ nsresult HTMLSelectElement::HandleKeyDown(EventChainPostVisitor& aVisitor) {
 
   PostHandleKeyEvent(newIndex, 0, keyEvent->IsShift(), isControlOrMeta);
   return NS_OK;
+}
+
+// https://html.spec.whatwg.org/#select-enabled-selectedcontent
+HTMLSelectedContentElement* HTMLSelectElement::GetEnabledSelectedContent() {
+  // To get a select's enabled selectedcontent given a select element select:
+  // 1. If select has the multiple attribute, then return null.
+  if (Multiple()) {
+    return nullptr;
+  }
+
+  // 2. Let selectedcontent be the first selectedcontent element descendant of
+  //    select in tree order if any such element exists; otherwise return null.
+  RefPtr<nsIHTMLCollection> collection =
+      GetElementsByTagName(u"selectedcontent"_ns);
+
+  if (!collection || collection->Length() == 0) {
+    return nullptr;
+  }
+  RefPtr firstSelectedContent =
+      HTMLSelectedContentElement::FromNode(collection->Item(0));
+  MOZ_DIAGNOSTIC_ASSERT(firstSelectedContent);
+  // 3. If selectedcontent is disabled, then return null.
+  // XXX(jjaschke): Is this the same disabled as for the element?
+  if (firstSelectedContent->IsDisabled()) {
+    return nullptr;
+  }
+  // 4. Return selectedcontent.
+  return firstSelectedContent;
+}
+
+// https://html.spec.whatwg.org/#update-a-select's-selectedcontent
+void HTMLSelectElement::UpdateSelectedContent() {
+  // To update a select's selectedcontent given a select element select:
+  if (!StaticPrefs::dom_select_customizable_select_enabled()) {
+    return;
+  }
+  // 1. Let selectedcontent be the result of get a select's enabled
+  // selectedcontent given select.
+  RefPtr selectedContent = GetEnabledSelectedContent();
+
+  // 2. If selectedcontent is null, then return.
+  if (!selectedContent) {
+    return;
+  }
+
+  // 3. Let option be the first option in select's list of options whose
+  //    selectedness is true, if any such option exists, otherwise null.
+  const int32_t selectedIndex = SelectedIndex();
+  RefPtr<HTMLOptionElement> option =
+      selectedIndex >= 0 ? Item(static_cast<uint32_t>(selectedIndex)) : nullptr;
+
+  // 4. If option is null, then run clear a selectedcontent given
+  //    selectedcontent.
+  if (!option) {
+    selectedContent->ClearContent();
+    return;
+  }
+
+  // 5. Otherwise, run clone an option into a selectedcontent given option and
+  //    selectedcontent.
+  CloneOptionIntoSelectedContent(option, selectedContent);
+}
+
+// https://html.spec.whatwg.org/#clone-an-option-into-a-selectedcontent
+void HTMLSelectElement::CloneOptionIntoSelectedContent(
+    HTMLOptionElement* aOption, HTMLSelectedContentElement* aSelectedContent) {
+  // To clone an option into a selectedcontent, given an option element option
+  // and a selectedcontent element selectedcontent:
+  MOZ_ASSERT(aOption);
+  MOZ_ASSERT(aSelectedContent);
+  // 1. Let documentFragment be a new DocumentFragment whose node document is
+  //    option's node document.
+  RefPtr<Document> doc = aOption->OwnerDoc();
+
+  RefPtr<DocumentFragment> fragment = doc->CreateDocumentFragment();
+
+  // 2. For each child of option's children:
+  for (nsIContent* child = aOption->GetFirstChild(); child;
+       child = child->GetNextSibling()) {
+    // 2.1 Let childClone be the result of running clone given child with
+    //     subtree set to true.
+    if (RefPtr childClone = child->CloneNode(true, IgnoreErrors())) {
+      // 2.2 Append childClone to documentFragment.
+      fragment->AppendChild(*childClone, IgnoreErrors());
+    }
+  }
+
+  // 3. Replace all with documentFragment within selectedcontent.
+  aSelectedContent->ReplaceChildren(fragment, IgnoreErrors());
+}
+
+// https://html.spec.whatwg.org/#clear-a-select's-non-primary-selectedcontent-elements
+void HTMLSelectElement::ClearNonPrimarySelectedContents() {
+  // To clear a select's non-primary selectedcontent elements, given a select
+  // element select:
+
+  // 1. Let passedFirstSelectedcontent be false.
+  bool passedFirstSelectedcontent = false;
+
+  // 2. For each descendant of select's descendants in tree order that is a
+  //    selectedcontent element:
+  // Note: `GetElementsByTagName` returns elements in tree order.
+  RefPtr<nsIHTMLCollection> collection =
+      GetElementsByTagName(u"selectedcontent"_ns);
+
+  if (!collection || collection->Length() == 0) {
+    return;
+  }
+
+  for (uint32_t i = 0; i < collection->Length(); i++) {
+    Element* elem = collection->Item(i);
+    RefPtr selectedContent = HTMLSelectedContentElement::FromNode(elem);
+    MOZ_DIAGNOSTIC_ASSERT(selectedContent);
+    // 2.1 If passedFirstSelectedcontent is false, then set
+    //     passedFirstSelectedcontent to true.
+    if (!passedFirstSelectedcontent) {
+      passedFirstSelectedcontent = true;
+      continue;
+    }
+    // 2.2 Otherwise, run clear a selectedcontent given descendant.
+    selectedContent->ClearContent();
+  }
 }
 
 }  // namespace mozilla::dom

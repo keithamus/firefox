@@ -349,6 +349,9 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
   }
   void GetAutofillState(nsAString& aState) { GetFormAutofillState(aState); }
 
+  MOZ_CAN_RUN_SCRIPT void UpdateSelectedContent();
+  MOZ_CAN_RUN_SCRIPT void ClearNonPrimarySelectedContents();
+
   void SetupShadowTree();
 
   // Returns the text node that has the selected <option>'s text.
@@ -509,6 +512,11 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
 
   MOZ_CAN_RUN_SCRIPT void FireDropDownEvent(bool aShow,
                                             bool aIsSourceTouchEvent);
+
+  HTMLSelectedContentElement* GetEnabledSelectedContent();
+
+  MOZ_CAN_RUN_SCRIPT void CloneOptionIntoSelectedContent(
+      HTMLOptionElement* aOption, HTMLSelectedContentElement* aSelectedContent);
 
   /** The options[] array */
   RefPtr<HTMLOptionsCollection> mOptions;
