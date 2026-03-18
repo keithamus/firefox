@@ -119,7 +119,8 @@ int32_t HTMLOptionsCollection::SelectedIndex() {
 }
 
 void HTMLOptionsCollection::SetSelectedIndex(int32_t aSelectedIndex) {
-  mSelect->SetSelectedIndex(aSelectedIndex);
+  RefPtr<HTMLSelectElement> kungFuDeathGrip(mSelect);
+  kungFuDeathGrip->SetSelectedIndex(aSelectedIndex);
 }
 
 Element* HTMLOptionsCollection::GetElementAt(uint32_t aIndex) {

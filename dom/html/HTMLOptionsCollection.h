@@ -126,7 +126,7 @@ class HTMLOptionsCollection final : public nsIHTMLCollection,
            const Nullable<HTMLElementOrLong>& aBefore, ErrorResult& aError);
   void Remove(int32_t aIndex);
   int32_t SelectedIndex();
-  void SetSelectedIndex(int32_t aSelectedIndex);
+  MOZ_CAN_RUN_SCRIPT void SetSelectedIndex(int32_t aSelectedIndex);
   void IndexedSetter(uint32_t aIndex, HTMLOptionElement* aOption,
                      ErrorResult& aError);
   virtual void GetSupportedNames(nsTArray<nsString>& aNames) override;

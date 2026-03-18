@@ -142,6 +142,17 @@ SafeOptionListMutation::~SafeOptionListMutation() {
       // are where they should be.
       mSelect->UpdateValueMissingValidityState();
       mSelect->UpdateValidityElementStates(mNotify);
+
+      // Schedule a deferred update of selectedcontent when selection changed
+      // during option list mutation. We can't call UpdateSelectedContent
+      // directly here because destructors can't be MOZ_CAN_RUN_SCRIPT.
+      if (mNotify && StaticPrefs::dom_select_customizable_select_enabled()) {
+        nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+            "HTMLSelectElement::DeferredUpdateSelectedContent",
+            [select = RefPtr{mSelect}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+              select->UpdateSelectedContent();
+            }));
+      }
     }
 #ifdef DEBUG
     mSelect->VerifyOptionsArray();
@@ -762,6 +773,15 @@ nsIHTMLCollection* HTMLSelectElement::SelectedOptions() {
   return mSelectedOptions;
 }
 
+void HTMLSelectElement::SetSelectedIndex(int32_t aIdx) {
+  SetSelectedIndexInternal(aIdx, true);
+  // Update selectedcontent when selection changes programmatically.
+  // Spec: https://html.spec.whatwg.org/#dom-select-selectedindex
+  if (StaticPrefs::dom_select_customizable_select_enabled()) {
+    UpdateSelectedContent();
+  }
+}
+
 void HTMLSelectElement::SetSelectedIndexInternal(int32_t aIndex, bool aNotify) {
   int32_t oldSelectedIndex = mSelectedIndex;
   OptionFlags mask{OptionFlag::IsSelected, OptionFlag::ClearAll,
@@ -1066,11 +1086,20 @@ void HTMLSelectElement::SetValue(const nsAString& aValue) {
     option->GetValue(optionVal);
     if (optionVal.Equals(aValue)) {
       SetSelectedIndexInternal(int32_t(i), true);
+      // Update selectedcontent when selection changes programmatically.
+      // Spec: https://html.spec.whatwg.org/#dom-select-value
+      if (StaticPrefs::dom_select_customizable_select_enabled()) {
+        UpdateSelectedContent();
+      }
       return;
     }
   }
   // No matching option was found.
   SetSelectedIndexInternal(-1, true);
+  // Update selectedcontent when selection changes programmatically.
+  if (StaticPrefs::dom_select_customizable_select_enabled()) {
+    UpdateSelectedContent();
+  }
 }
 
 int32_t HTMLSelectElement::TabIndexDefault() { return 0; }
@@ -1113,6 +1142,18 @@ bool HTMLSelectElement::SelectSomething(bool aNotify) {
 
       UpdateValueMissingValidityState();
       UpdateValidityElementStates(aNotify);
+
+      // Schedule a deferred update of selectedcontent when selection changes
+      // during auto-selection. We can't call UpdateSelectedContent directly
+      // here because SelectSomething can't be MOZ_CAN_RUN_SCRIPT (it's called
+      // from DOM mutation paths).
+      if (aNotify && StaticPrefs::dom_select_customizable_select_enabled()) {
+        nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+            "HTMLSelectElement::DeferredUpdateSelectedContent",
+            [self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+              self->UpdateSelectedContent();
+            }));
+      }
 
       return true;
     }
@@ -1180,6 +1221,17 @@ void HTMLSelectElement::BeforeSetAttr(int32_t aNameSpaceID, nsAtom* aName,
         // optimization for cases when the select is not multiple that
         // would lead to only a single option getting deselected.
         SetSelectedIndexInternal(mSelectedIndex, aNotify);
+
+        // Schedule a deferred update of selectedcontent when switching from
+        // multiple to single-select. We can't call UpdateSelectedContent
+        // directly here because BeforeSetAttr can't be MOZ_CAN_RUN_SCRIPT.
+        if (StaticPrefs::dom_select_customizable_select_enabled()) {
+          nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+              "HTMLSelectElement::DeferredUpdateSelectedContent",
+              [self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY {
+                self->UpdateSelectedContent();
+              }));
+        }
       }
     }
   }
@@ -1263,6 +1315,18 @@ void HTMLSelectElement::DoneAddingChildren(bool aHaveNotified) {
   }
 
   mDefaultSelectionSet = true;
+
+  // Update selectedcontent after parsing is complete.
+  // At this point, the select element and its options have been fully parsed,
+  // and the selection state has been determined (either from @selected
+  // attributes or by selecting the first option). Update selectedcontent to
+  // reflect the final selection state.
+  if (StaticPrefs::dom_select_customizable_select_enabled()) {
+    nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+        "HTMLSelectElement::DeferredUpdateSelectedContent",
+        [self = RefPtr{this}]()
+            MOZ_CAN_RUN_SCRIPT_BOUNDARY { self->UpdateSelectedContent(); }));
+  }
 }
 
 bool HTMLSelectElement::ParseAttribute(int32_t aNamespaceID, nsAtom* aAttribute,

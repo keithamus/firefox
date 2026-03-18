@@ -185,9 +185,9 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
   nsIHTMLCollection* SelectedOptions();
 
   int32_t SelectedIndex() const { return mSelectedIndex; }
-  void SetSelectedIndex(int32_t aIdx) { SetSelectedIndexInternal(aIdx, true); }
+  MOZ_CAN_RUN_SCRIPT void SetSelectedIndex(int32_t aIdx);
   void GetValue(DOMString& aValue) const;
-  void SetValue(const nsAString& aValue);
+  MOZ_CAN_RUN_SCRIPT void SetValue(const nsAString& aValue);
 
   // Override SetCustomValidity so we update our state properly when it's called
   // via bindings.
