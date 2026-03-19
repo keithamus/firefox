@@ -18,3 +18,4 @@ These linked pages contain design documents for the DOM implementation in Gecko.
    streams
    use-counters
    loggingKeyboardIME
+   contributing-common-gotchas
