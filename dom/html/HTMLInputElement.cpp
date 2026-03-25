@@ -49,6 +49,7 @@
 #include "mozilla/dom/MouseEvent.h"
 #include "mozilla/dom/NumericInputTypes.h"
 #include "mozilla/dom/ProgressEvent.h"
+#include "mozilla/dom/ShadowRootBinding.h"
 #include "mozilla/dom/UnionTypes.h"
 #include "mozilla/dom/UserActivation.h"
 #include "mozilla/dom/WheelEventBinding.h"

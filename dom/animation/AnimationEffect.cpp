@@ -367,6 +367,12 @@ void AnimationEffect::UpdateNormalizedTiming() {
       timeline->TimelineDuration(mAnimation->GetTimelineRange());
   MOZ_ASSERT(!timelineDuration.IsNull(),
              "We always have a timeline duration even for 0 duration");
+  // A zero timeline duration can happen for a view timeline when the subject's
+  // cover range is degenerate (e.g. the subject exactly fills the scrollport
+  // accounting for insets). In that case, normalization is not meaningful.
+  if (timelineDuration.Value().IsZero()) {
+    return;
+  }
   mNormalizedTiming.emplace(mTiming.Normalize(timelineDuration.Value()));
 }
 

@@ -8,6 +8,7 @@
 #include "mozilla/BasicEvents.h"
 #include "mozilla/Casting.h"
 #include "mozilla/ClearOnShutdown.h"
+#include "mozilla/ErrorResult.h"
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/MappedDeclarationsBuilder.h"
 #include "mozilla/Maybe.h"
@@ -20,19 +21,25 @@
 #include "mozilla/dom/DocumentFragment.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/FormData.h"
+#include "mozilla/dom/HTMLButtonElement.h"
 #include "mozilla/dom/HTMLOptGroupElement.h"
 #include "mozilla/dom/HTMLOptionElement.h"
 #include "mozilla/dom/HTMLSelectElementBinding.h"
 #include "mozilla/dom/HTMLSelectedContentElement.h"
+#include "mozilla/dom/HTMLSlotElement.h"
+#include "mozilla/dom/HTMLSlotElementBinding.h"
 #include "mozilla/dom/MouseEventBinding.h"
+#include "mozilla/dom/ShadowRootBinding.h"
 #include "mozilla/dom/UnionTypes.h"
 #include "mozilla/dom/WindowGlobalChild.h"
+#include "mozilla/fallible.h"
 #include "nsComboboxControlFrame.h"
 #include "nsComputedDOMStyle.h"
 #include "nsContentCreatorFunctions.h"
 #include "nsContentList.h"
 #include "nsContentUtils.h"
 #include "nsError.h"
+#include "nsGenericHTMLElement.h"
 #include "nsGkAtoms.h"
 #include "nsIFrame.h"
 #include "nsLayoutUtils.h"
@@ -186,33 +193,69 @@ HTMLSelectElement::HTMLSelectElement(
                     ElementState::VALID);
 }
 
+HTMLButtonElement* HTMLSelectElement::GetFirstButton() const {
+  return HTMLButtonElement::FromNodeOrNull(nsINode::GetFirstElementChild());
+}
+
+/* https://html.spec.whatwg.org/#the-select-element-2:the-select-element-13 */
 void HTMLSelectElement::SetupShadowTree() {
   AttachAndSetUAShadowRoot(NotifyUAWidget::No);
+  // When a select is being rendered as a drop-down box with base appearance, it
+  // is expected to render with a shadow tree that contains the following
+  // elements:
   RefPtr<ShadowRoot> sr = GetShadowRoot();
   if (NS_WARN_IF(!sr)) {
     return;
   }
   sr->AppendBuiltInStyleSheet(BuiltInStyleSheet::Select);
-  // For now, we append a <label> with a text node, a <span> (for the menulist
-  // icon), and an hidden <slot> element.
   Document* doc = OwnerDoc();
-  RefPtr label = doc->CreateHTMLElement(nsGkAtoms::label);
-  label->SetPseudoElementType(PseudoStyleType::MozSelectContent);
-  {
-    // This matches ButtonControlFrame::EnsureNonEmptyLabel.
-    RefPtr text = doc->CreateTextNode(u"\ufeff"_ns);
-    label->AppendChildTo(text, false, IgnoreErrors());
-  }
-  sr->AppendChildTo(label, false, IgnoreErrors());
-  RefPtr icon = doc->CreateHTMLElement(nsGkAtoms::span);
-  icon->SetPseudoElementType(PseudoStyleType::PickerIcon);
-  {
-    RefPtr text = doc->CreateTextNode(u"\ufeff"_ns);
-    icon->AppendChildTo(text, false, IgnoreErrors());
-  }
-  sr->AppendChildTo(icon, false, IgnoreErrors());
+  // A select button slot, which is a slot element. It is appended to the
+  // select's shadow root as the first child. It is expected to take the first
+  // child element of the select if the first child element is a button.
   RefPtr slot = doc->CreateHTMLElement(nsGkAtoms::slot);
+  slot->SetAttr(kNameSpaceID_None, nsGkAtoms::name,
+                u"internal-select-button"_ns, false);
+  {
+    // A select fallback button text, which is a div element. It is appended to
+    // the select button slot.
+    // XXX: For now, we append a <label> with a text node, a <span> (for the
+    // menulist icon), and an hidden <slot> element.
+    RefPtr label = doc->CreateHTMLElement(nsGkAtoms::label);
+    label->SetPseudoElementType(PseudoStyleType::MozSelectContent);
+    {
+      // XXX: This matches ButtonControlFrame::EnsureNonEmptyLabel.
+      RefPtr text = doc->CreateTextNode(u"\ufeff"_ns);
+      label->AppendChildTo(text, false, IgnoreErrors());
+    }
+    slot->AppendChildTo(label, false, IgnoreErrors());
+    RefPtr icon = doc->CreateHTMLElement(nsGkAtoms::span);
+    icon->SetPseudoElementType(PseudoStyleType::PickerIcon);
+    {
+      RefPtr text = doc->CreateTextNode(u"\ufeff"_ns);
+      icon->AppendChildTo(text, false, IgnoreErrors());
+    }
+    slot->AppendChildTo(icon, false, IgnoreErrors());
+  }
   sr->AppendChildTo(slot, false, IgnoreErrors());
+
+  RefPtr picker = doc->CreateHTMLElement(nsGkAtoms::div);
+  picker->SetPseudoElementType(PseudoStyleType::Picker);
+  {
+    // A select popover, which is a div element. It is appended to the select's
+    // shadow root as the second child, after the select button slot. The select
+    // element's '::picker' pseudo-element is the select popover if the provided
+    // argument is select.
+    nsAutoString popoverstate;
+    picker->SetAttr(kNameSpaceID_None, nsGkAtoms::popover, popoverstate, false);
+
+    // A select popover slot, which is a slot element. It is appended to the
+    // select popover. It is expected to take all child nodes of the select
+    // except for the first child button, which is taken by the select button
+    // slot.
+    RefPtr pickerSlot = doc->CreateHTMLElement(nsGkAtoms::slot);
+    picker->AppendChildTo(pickerSlot, false, IgnoreErrors());
+  }
+  sr->AppendChildTo(picker, false, IgnoreErrors());
 }
 
 Text* HTMLSelectElement::GetSelectedContentText() const {
@@ -221,7 +264,10 @@ Text* HTMLSelectElement::GetSelectedContentText() const {
     MOZ_ASSERT(OwnerDoc()->IsStaticDocument() || !IsInComposedDoc());
     return nullptr;
   }
-  auto* label = sr->GetFirstChild();
+  auto* slot = sr->GetFirstChild();
+  MOZ_DIAGNOSTIC_ASSERT(slot);
+  MOZ_DIAGNOSTIC_ASSERT(slot->IsHTMLElement(nsGkAtoms::slot));
+  auto* label = slot->GetFirstChild();
   MOZ_DIAGNOSTIC_ASSERT(label);
   MOZ_DIAGNOSTIC_ASSERT(label->IsHTMLElement(nsGkAtoms::label));
   MOZ_DIAGNOSTIC_ASSERT(label->GetFirstChild());
@@ -357,35 +403,62 @@ void HTMLSelectElement::RemoveChildNode(
       aKid, aNotify, aState, aNewParent, aMutationEffectOnScript);
 }
 
+static int32_t InsertOptionsFromSubtree(nsIContent* aNode,
+                                        HTMLOptionsCollection* aOptions,
+                                        int32_t aStartIndex,
+                                        bool aInsideOptGroup) {
+  if (auto* opt = HTMLOptionElement::FromNode(aNode)) {
+    aOptions->InsertOptionAt(opt, aStartIndex);
+    return 1;
+  }
+
+  bool isOptGroup = aNode->IsHTMLElement(nsGkAtoms::optgroup);
+  if (aNode->IsHTMLElement(nsGkAtoms::select) ||
+      aNode->IsHTMLElement(nsGkAtoms::hr) ||
+      aNode->IsHTMLElement(nsGkAtoms::datalist) ||
+      (isOptGroup && aInsideOptGroup)) {
+    return 0;
+  }
+
+  int32_t total = 0;
+  for (nsIContent* child = aNode->GetFirstChild(); child;
+       child = child->GetNextSibling()) {
+    total += InsertOptionsFromSubtree(child, aOptions, aStartIndex + total,
+                                      aInsideOptGroup || isOptGroup);
+  }
+  return total;
+}
+
 void HTMLSelectElement::InsertOptionsIntoList(nsIContent* aOptions,
                                               int32_t aListIndex,
-                                              int32_t aDepth, bool aNotify) {
-  MOZ_ASSERT(aDepth == 0 || aDepth == 1);
+                                              bool aIsDirectSelectChild,
+                                              bool aInsideOptGroup,
+                                              bool aNotify) {
   int32_t insertIndex = aListIndex;
 
-  HTMLOptionElement* optElement = HTMLOptionElement::FromNode(aOptions);
-  if (optElement) {
+  if (auto* optElement = HTMLOptionElement::FromNode(aOptions)) {
     mOptions->InsertOptionAt(optElement, insertIndex);
     insertIndex++;
-  } else if (aDepth == 0) {
-    // If it's at the top level, then we just found out there are non-options
-    // at the top level, which will throw off the insert count
-    mNonOptionChildren++;
-
-    // Deal with optgroups
-    if (aOptions->IsHTMLElement(nsGkAtoms::optgroup)) {
-      mOptGroupCount++;
-
-      for (nsIContent* child = aOptions->GetFirstChild(); child;
-           child = child->GetNextSibling()) {
-        optElement = HTMLOptionElement::FromNode(child);
-        if (optElement) {
-          mOptions->InsertOptionAt(optElement, insertIndex);
-          insertIndex++;
-        }
+  } else {
+    if (aIsDirectSelectChild) {
+      mNonOptionChildren++;
+      if (aOptions->IsHTMLElement(nsGkAtoms::optgroup)) {
+        mOptGroupCount++;
       }
     }
-  }  // else ignore even if optgroup; we want to ignore nested optgroups.
+
+    bool isOptGroup = aOptions->IsHTMLElement(nsGkAtoms::optgroup);
+    if (!aOptions->IsHTMLElement(nsGkAtoms::select) &&
+        !aOptions->IsHTMLElement(nsGkAtoms::hr) &&
+        !aOptions->IsHTMLElement(nsGkAtoms::datalist) &&
+        !(isOptGroup && aInsideOptGroup)) {
+      for (nsIContent* child = aOptions->GetFirstChild(); child;
+           child = child->GetNextSibling()) {
+        insertIndex += InsertOptionsFromSubtree(child, mOptions, insertIndex,
+                                                aInsideOptGroup || isOptGroup);
+      }
+    }
+  }
 
   // Deal with the selected list
   if (insertIndex - aListIndex) {
@@ -422,43 +495,76 @@ void HTMLSelectElement::InsertOptionsIntoList(nsIContent* aOptions,
   }
 }
 
+static nsresult RemoveOptionsFromSubtree(nsIContent* aNode,
+                                         HTMLOptionsCollection* aOptions,
+                                         int32_t aStartIndex,
+                                         bool aInsideOptGroup,
+                                         int32_t& aNumRemoved) {
+  if (auto* opt = HTMLOptionElement::FromNode(aNode)) {
+    if (aOptions->ItemAsOption(aStartIndex) != opt) {
+      NS_ERROR("wrong option at index");
+      return NS_ERROR_UNEXPECTED;
+    }
+    aOptions->RemoveOptionAt(aStartIndex);
+    aNumRemoved++;
+    return NS_OK;
+  }
+
+  bool isOptGroup = aNode->IsHTMLElement(nsGkAtoms::optgroup);
+  if (aNode->IsHTMLElement(nsGkAtoms::select) ||
+      aNode->IsHTMLElement(nsGkAtoms::hr) ||
+      aNode->IsHTMLElement(nsGkAtoms::datalist) ||
+      (isOptGroup && aInsideOptGroup)) {
+    return NS_OK;
+  }
+
+  for (nsIContent* child = aNode->GetFirstChild(); child;
+       child = child->GetNextSibling()) {
+    nsresult rv =
+        RemoveOptionsFromSubtree(child, aOptions, aStartIndex,
+                                 aInsideOptGroup || isOptGroup, aNumRemoved);
+    NS_ENSURE_SUCCESS(rv, rv);
+    // aStartIndex stays the same because each removal shifts the array
+  }
+  return NS_OK;
+}
+
 nsresult HTMLSelectElement::RemoveOptionsFromList(nsIContent* aOptions,
                                                   int32_t aListIndex,
-                                                  int32_t aDepth,
+                                                  bool aIsDirectSelectChild,
+                                                  bool aInsideOptGroup,
                                                   bool aNotify) {
-  MOZ_ASSERT(aDepth == 0 || aDepth == 1);
   int32_t numRemoved = 0;
 
-  HTMLOptionElement* optElement = HTMLOptionElement::FromNode(aOptions);
-  if (optElement) {
+  if (auto* optElement = HTMLOptionElement::FromNode(aOptions)) {
     if (mOptions->ItemAsOption(aListIndex) != optElement) {
       NS_ERROR("wrong option at index");
       return NS_ERROR_UNEXPECTED;
     }
     mOptions->RemoveOptionAt(aListIndex);
     numRemoved++;
-  } else if (aDepth == 0) {
-    // Yay, one less artifact at the top level.
-    mNonOptionChildren--;
-
-    // Recurse down deeper for options
-    if (mOptGroupCount && aOptions->IsHTMLElement(nsGkAtoms::optgroup)) {
-      mOptGroupCount--;
-
-      for (nsIContent* child = aOptions->GetFirstChild(); child;
-           child = child->GetNextSibling()) {
-        optElement = HTMLOptionElement::FromNode(child);
-        if (optElement) {
-          if (mOptions->ItemAsOption(aListIndex) != optElement) {
-            NS_ERROR("wrong option at index");
-            return NS_ERROR_UNEXPECTED;
-          }
-          mOptions->RemoveOptionAt(aListIndex);
-          numRemoved++;
-        }
+  } else {
+    if (aIsDirectSelectChild) {
+      mNonOptionChildren--;
+      if (mOptGroupCount && aOptions->IsHTMLElement(nsGkAtoms::optgroup)) {
+        mOptGroupCount--;
       }
     }
-  }  // else don't check for an optgroup; we want to ignore nested optgroups
+
+    bool isOptGroup = aOptions->IsHTMLElement(nsGkAtoms::optgroup);
+    if (!aOptions->IsHTMLElement(nsGkAtoms::select) &&
+        !aOptions->IsHTMLElement(nsGkAtoms::hr) &&
+        !aOptions->IsHTMLElement(nsGkAtoms::datalist) &&
+        !(isOptGroup && aInsideOptGroup)) {
+      for (nsIContent* child = aOptions->GetFirstChild(); child;
+           child = child->GetNextSibling()) {
+        nsresult rv =
+            RemoveOptionsFromSubtree(child, mOptions, aListIndex,
+                                     aInsideOptGroup || isOptGroup, numRemoved);
+        NS_ENSURE_SUCCESS(rv, rv);
+      }
+    }
+  }
 
   if (numRemoved) {
     // Tell the widget we removed the options
@@ -502,6 +608,18 @@ nsresult HTMLSelectElement::RemoveOptionsFromList(nsIContent* aOptions,
   return NS_OK;
 }
 
+static bool IsInsideOptGroupOf(nsIContent* aParent, nsIContent* aSelect) {
+  for (nsIContent* node = aParent; node != aSelect; node = node->GetParent()) {
+    if (!node) {
+      return false;
+    }
+    if (node->IsHTMLElement(nsGkAtoms::optgroup)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // XXXldb Doing the processing before the content nodes have been added
 // to the document (as the name of this function seems to require, and
 // as the callers do), is highly unusual.  Passing around unparented
@@ -510,10 +628,25 @@ nsresult HTMLSelectElement::RemoveOptionsFromList(nsIContent* aOptions,
 NS_IMETHODIMP
 HTMLSelectElement::WillAddOptions(nsIContent* aOptions, nsIContent* aParent,
                                   int32_t aContentIndex, bool aNotify) {
-  if (this != aParent && this != aParent->GetParent()) {
-    return NS_OK;
+  // Verify aParent is inside our select tree (not inside another select).
+  bool isDirectSelectChild = (aParent == this);
+  if (!isDirectSelectChild) {
+    bool foundSelect = false;
+    for (nsIContent* node = aParent; node; node = node->GetParent()) {
+      if (node == this) {
+        foundSelect = true;
+        break;
+      }
+      if (node != aParent && HTMLSelectElement::FromNode(node)) {
+        return NS_OK;
+      }
+    }
+    if (!foundSelect) {
+      return NS_OK;
+    }
   }
-  int32_t level = aParent == this ? 0 : 1;
+
+  bool insideOptGroup = IsInsideOptGroupOf(aParent, this);
 
   // Get the index where the options will be inserted
   int32_t ind = -1;
@@ -543,17 +676,33 @@ HTMLSelectElement::WillAddOptions(nsIContent* aOptions, nsIContent* aParent,
     }
   }
 
-  InsertOptionsIntoList(aOptions, ind, level, aNotify);
+  InsertOptionsIntoList(aOptions, ind, isDirectSelectChild, insideOptGroup,
+                        aNotify);
   return NS_OK;
 }
 
 NS_IMETHODIMP
 HTMLSelectElement::WillRemoveOptions(nsIContent* aParent, int32_t aContentIndex,
                                      bool aNotify) {
-  if (this != aParent && this != aParent->GetParent()) {
-    return NS_OK;
+  // Verify aParent is inside our select tree (not inside another select).
+  bool isDirectSelectChild = (aParent == this);
+  if (!isDirectSelectChild) {
+    bool foundSelect = false;
+    for (nsIContent* node = aParent; node; node = node->GetParent()) {
+      if (node == this) {
+        foundSelect = true;
+        break;
+      }
+      if (node != aParent && HTMLSelectElement::FromNode(node)) {
+        return NS_OK;
+      }
+    }
+    if (!foundSelect) {
+      return NS_OK;
+    }
   }
-  int32_t level = this == aParent ? 0 : 1;
+
+  bool insideOptGroup = IsInsideOptGroupOf(aParent, this);
 
   // Get the index where the options will be removed
   nsIContent* currentKid = aParent->GetChildAt_Deprecated(aContentIndex);
@@ -568,7 +717,8 @@ HTMLSelectElement::WillRemoveOptions(nsIContent* aParent, int32_t aContentIndex,
       ind = GetFirstOptionIndex(currentKid);
     }
     if (ind != -1) {
-      nsresult rv = RemoveOptionsFromList(currentKid, ind, level, aNotify);
+      nsresult rv = RemoveOptionsFromList(currentKid, ind, isDirectSelectChild,
+                                          insideOptGroup, aNotify);
       NS_ENSURE_SUCCESS(rv, rv);
     }
   }
@@ -1029,28 +1179,25 @@ bool HTMLSelectElement::IsOptionDisabled(HTMLOptionElement* aOption) const {
     return true;
   }
 
-  // Check for disabled optgroups
-  // If there are no artifacts, there are no optgroups
+  // Check for disabled optgroups. Per spec, walk ancestors until we hit
+  // select/hr/datalist/option (return false) or optgroup (check its disabled).
+  // Other elements (like div wrappers) are skipped.
   if (mNonOptionChildren) {
     for (nsCOMPtr<Element> node =
              static_cast<nsINode*>(aOption)->GetParentElement();
          node; node = node->GetParentElement()) {
-      // If we reached the select element, we're done
-      if (node->IsHTMLElement(nsGkAtoms::select)) {
+      if (node->IsHTMLElement(nsGkAtoms::select) ||
+          node->IsHTMLElement(nsGkAtoms::hr) ||
+          node->IsHTMLElement(nsGkAtoms::datalist) ||
+          node->IsHTMLElement(nsGkAtoms::option)) {
         return false;
       }
 
-      RefPtr<HTMLOptGroupElement> optGroupElement =
-          HTMLOptGroupElement::FromNode(node);
-
-      if (!optGroupElement) {
-        // If you put something else between you and the optgroup, you're a
-        // moron and you deserve not to have optgroup disabling work.
+      if (auto* optGroupElement = HTMLOptGroupElement::FromNode(node)) {
+        if (optGroupElement->Disabled()) {
+          return true;
+        }
         return false;
-      }
-
-      if (optGroupElement->Disabled()) {
-        return true;
       }
     }
   }
@@ -1596,26 +1743,48 @@ void HTMLSelectElement::DispatchContentReset() {
   }
 }
 
+static void AddOptionsFromSubtree(nsIContent* aNode,
+                                  HTMLOptionsCollection* aArray,
+                                  bool aInsideOptGroup) {
+  if (auto* opt = HTMLOptionElement::FromNode(aNode)) {
+    aArray->AppendOption(opt);
+    return;
+  }
+
+  bool isOptGroup = aNode->IsHTMLElement(nsGkAtoms::optgroup);
+  if (aNode->IsHTMLElement(nsGkAtoms::select) ||
+      aNode->IsHTMLElement(nsGkAtoms::hr) ||
+      aNode->IsHTMLElement(nsGkAtoms::datalist) ||
+      (isOptGroup && aInsideOptGroup)) {
+    return;
+  }
+
+  for (nsIContent* child = aNode->GetFirstChild(); child;
+       child = child->GetNextSibling()) {
+    AddOptionsFromSubtree(child, aArray, aInsideOptGroup || isOptGroup);
+  }
+}
+
 static void AddOptions(nsIContent* aRoot, HTMLOptionsCollection* aArray) {
   for (nsIContent* child = aRoot->GetFirstChild(); child;
        child = child->GetNextSibling()) {
-    HTMLOptionElement* opt = HTMLOptionElement::FromNode(child);
-    if (opt) {
-      aArray->AppendOption(opt);
-    } else if (child->IsHTMLElement(nsGkAtoms::optgroup)) {
-      for (nsIContent* grandchild = child->GetFirstChild(); grandchild;
-           grandchild = grandchild->GetNextSibling()) {
-        opt = HTMLOptionElement::FromNode(grandchild);
-        if (opt) {
-          aArray->AppendOption(opt);
-        }
-      }
-    }
+    AddOptionsFromSubtree(child, aArray, false);
   }
 }
 
 void HTMLSelectElement::RebuildOptionsArray(bool aNotify) {
   mOptions->Clear();
+  mNonOptionChildren = 0;
+  mOptGroupCount = 0;
+  for (nsIContent* child = nsINode::GetFirstChild(); child;
+       child = child->GetNextSibling()) {
+    if (!HTMLOptionElement::FromNode(child)) {
+      mNonOptionChildren++;
+      if (child->IsHTMLElement(nsGkAtoms::optgroup)) {
+        mOptGroupCount++;
+      }
+    }
+  }
   AddOptions(this, mOptions);
   FindSelectedIndex(0, aNotify);
 }
@@ -1672,24 +1841,35 @@ nsresult HTMLSelectElement::GetValidationMessage(nsAString& aValidationMessage,
 
 #ifdef DEBUG
 
+static void VerifyOptionsFromSubtree(nsIContent* aNode, int32_t& aIndex,
+                                     HTMLOptionsCollection* aOptions,
+                                     bool aInsideOptGroup) {
+  if (auto* opt = HTMLOptionElement::FromNode(aNode)) {
+    NS_ASSERTION(opt == aOptions->ItemAsOption(aIndex++),
+                 "Options collection broken");
+    return;
+  }
+
+  bool isOptGroup = aNode->IsHTMLElement(nsGkAtoms::optgroup);
+  if (aNode->IsHTMLElement(nsGkAtoms::select) ||
+      aNode->IsHTMLElement(nsGkAtoms::hr) ||
+      aNode->IsHTMLElement(nsGkAtoms::datalist) ||
+      (isOptGroup && aInsideOptGroup)) {
+    return;
+  }
+
+  for (nsIContent* child = aNode->GetFirstChild(); child;
+       child = child->GetNextSibling()) {
+    VerifyOptionsFromSubtree(child, aIndex, aOptions,
+                             aInsideOptGroup || isOptGroup);
+  }
+}
+
 void HTMLSelectElement::VerifyOptionsArray() {
   int32_t index = 0;
   for (nsIContent* child = nsINode::GetFirstChild(); child;
        child = child->GetNextSibling()) {
-    HTMLOptionElement* opt = HTMLOptionElement::FromNode(child);
-    if (opt) {
-      NS_ASSERTION(opt == mOptions->ItemAsOption(index++),
-                   "Options collection broken");
-    } else if (child->IsHTMLElement(nsGkAtoms::optgroup)) {
-      for (nsIContent* grandchild = child->GetFirstChild(); grandchild;
-           grandchild = grandchild->GetNextSibling()) {
-        opt = HTMLOptionElement::FromNode(grandchild);
-        if (opt) {
-          NS_ASSERTION(opt == mOptions->ItemAsOption(index++),
-                       "Options collection broken");
-        }
-      }
-    }
+    VerifyOptionsFromSubtree(child, index, mOptions, false);
   }
 }
 

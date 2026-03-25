@@ -22,7 +22,9 @@
 #include "mozilla/dom/DocumentFragment.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/ElementBinding.h"
+#include "mozilla/dom/HTMLButtonElement.h"
 #include "mozilla/dom/HTMLDetailsElement.h"
+#include "mozilla/dom/HTMLSelectElement.h"
 #include "mozilla/dom/HTMLSlotElement.h"
 #include "mozilla/dom/HTMLSummaryElement.h"
 #include "mozilla/dom/MutationObservers.h"
@@ -33,6 +35,7 @@
 #include "mozilla/dom/TrustedTypesConstants.h"
 #include "mozilla/dom/UnbindContext.h"
 #include "nsContentUtils.h"
+#include "nsGenericHTMLElement.h"
 #include "nsINode.h"
 #include "nsWindowSizes.h"
 
@@ -81,9 +84,6 @@ ShadowRoot::ShadowRoot(Element* aElement, ShadowRootMode aMode,
   if (aSlotAssignment == SlotAssignmentMode::Manual) {
     flags |= SHADOW_ROOT_SLOT_ASSIGNMENT_MANUAL;
   }
-  if (aElement->IsHTMLElement(nsGkAtoms::details)) {
-    flags |= SHADOW_ROOT_IS_DETAILS_SHADOW_TREE;
-  }
   if (aDeclarative == Declarative::Yes) {
     flags |= SHADOW_ROOT_IS_DECLARATIVE;
   }
@@ -93,6 +93,14 @@ ShadowRoot::ShadowRoot(Element* aElement, ShadowRootMode aMode,
   if (aIsSerializable == IsSerializable::Yes) {
     flags |= SHADOW_ROOT_IS_SERIALIZABLE;
   }
+  auto internalType = ShadowRootInternalType::None;
+  if (aElement->IsHTMLElement(nsGkAtoms::details)) {
+    internalType = ShadowRootInternalType::Details;
+  } else if (aElement->IsHTMLElement(nsGkAtoms::select)) {
+    internalType = ShadowRootInternalType::Select;
+  }
+  flags |= (static_cast<uint32_t>(internalType) *
+            SHADOWROOT_INTERNAL_TREE_TYPE_LOW_BIT);
   SetFlags(flags);
   if (Host()->IsInNativeAnonymousSubtree()) {
     // NOTE(emilio): We could consider just propagating the
@@ -633,19 +641,33 @@ void ShadowRoot::GetEventTargetParent(EventChainPreVisitor& aVisitor) {
 
 void ShadowRoot::GetSlotNameFor(const nsIContent& aContent,
                                 nsAString& aName) const {
-  if (IsDetailsShadowTree()) {
-    const auto* summary = HTMLSummaryElement::FromNode(aContent);
-    if (summary && summary->IsMainSummary()) {
-      aName.AssignLiteral("internal-main-summary");
+  switch (GetShadowRootInternalType()) {
+    case ShadowRootInternalType::Details: {
+      const auto* summary = HTMLSummaryElement::FromNode(aContent);
+      if (summary && summary->IsMainSummary()) {
+        aName.AssignLiteral("internal-main-summary");
+      }
+      // Otherwise use the default slot.
+      return;
     }
-    // Otherwise use the default slot.
-    return;
-  }
-
-  // Note that if slot attribute is missing, assign it to the first default
-  // slot, if exists.
-  if (const Element* element = Element::FromNode(aContent)) {
-    element->GetAttr(nsGkAtoms::slot, aName);
+    case ShadowRootInternalType::Select: {
+      const auto* button = HTMLButtonElement::FromNode(aContent);
+      if (button) {
+        const auto* select =
+            HTMLSelectElement::FromNodeOrNull(button->GetParent());
+        if (select && select->GetFirstButton() == button) {
+          aName.AssignLiteral("internal-select-button");
+        }
+      }
+      // Otherwise use the default slot.
+      return;
+    }
+    case ShadowRootInternalType::None:
+      // Note that if slot attribute is missing, assign it to the first default
+      // slot, if exists.
+      if (const Element* element = Element::FromNode(aContent)) {
+        element->GetAttr(nsGkAtoms::slot, aName);
+      }
   }
 }
 
@@ -766,7 +788,7 @@ void ShadowRoot::MaybeReassignContent(nsIContent& aElementOrText) {
 }
 
 void ShadowRoot::MaybeReassignMainSummary(SummaryChangeReason aReason) {
-  MOZ_ASSERT(IsDetailsShadowTree());
+  MOZ_ASSERT(GetShadowRootInternalType() == ShadowRootInternalType::Details);
   if (aReason == SummaryChangeReason::Insertion) {
     // We've inserted a summary element, may need to remove the existing one.
     SlotArray* array = mSlotMap.Get(u"internal-main-summary"_ns);
@@ -786,6 +808,30 @@ void ShadowRoot::MaybeReassignMainSummary(SummaryChangeReason aReason) {
     // We've removed a summary element, we may need to assign the new one.
     if (HTMLSummaryElement* newMainSummary = details->GetFirstSummary()) {
       MaybeReassignContent(*newMainSummary);
+    }
+  }
+}
+
+void ShadowRoot::MaybeReassignSelectButton(SelectButtonChangeReason aReason) {
+  MOZ_ASSERT(GetShadowRootInternalType() == ShadowRootInternalType::Select);
+  if (aReason == SelectButtonChangeReason::Insertion) {
+    // We've inserted a button element, may need to remove the existing one.
+    SlotArray* array = mSlotMap.Get(u"internal-select-button"_ns);
+    MOZ_RELEASE_ASSERT(array && (*array).Length() == 1);
+    HTMLSlotElement* slot = (*array).ElementAt(0);
+    auto assigned = slot->AssignedNodes();
+    if (assigned.IsEmpty()) {
+      return;
+    }
+    if (auto* button = HTMLButtonElement::FromNode(assigned[0])) {
+      MaybeReassignContent(*button);
+    }
+  } else if (MOZ_LIKELY(GetHost())) {
+    auto* select = HTMLSelectElement::FromNode(Host());
+    MOZ_DIAGNOSTIC_ASSERT(select);
+    // We've removed a button element, we may need to assign the new one.
+    if (HTMLButtonElement* newButton = select->GetFirstButton()) {
+      MaybeReassignContent(*newButton);
     }
   }
 }
@@ -852,8 +898,19 @@ void ShadowRoot::MaybeUnslotHostChild(nsIContent& aChild) {
 
   slot->EnqueueSlotChangeEvent();
   slot->RemoveAssignedNode(aChild);
-  if (IsDetailsShadowTree() && aChild.IsHTMLElement(nsGkAtoms::summary)) {
-    MaybeReassignMainSummary(SummaryChangeReason::Deletion);
+  switch (GetShadowRootInternalType()) {
+    case ShadowRootInternalType::None:
+      return;
+    case ShadowRootInternalType::Details:
+      if (aChild.IsHTMLElement(nsGkAtoms::summary)) {
+        MaybeReassignMainSummary(SummaryChangeReason::Deletion);
+      }
+      return;
+    case ShadowRootInternalType::Select:
+      if (aChild.IsHTMLElement(nsGkAtoms::button)) {
+        MaybeReassignSelectButton(SelectButtonChangeReason::Deletion);
+      }
+      return;
   }
 }
 
@@ -870,8 +927,19 @@ void ShadowRoot::MaybeSlotHostChild(nsIContent& aChild) {
     return;
   }
 
-  if (IsDetailsShadowTree() && aChild.IsHTMLElement(nsGkAtoms::summary)) {
-    MaybeReassignMainSummary(SummaryChangeReason::Insertion);
+  switch (GetShadowRootInternalType()) {
+    case ShadowRootInternalType::None:
+      break;
+    case ShadowRootInternalType::Details:
+      if (aChild.IsHTMLElement(nsGkAtoms::summary)) {
+        MaybeReassignMainSummary(SummaryChangeReason::Insertion);
+      }
+      break;
+    case ShadowRootInternalType::Select:
+      if (aChild.IsHTMLElement(nsGkAtoms::button)) {
+        MaybeReassignSelectButton(SelectButtonChangeReason::Insertion);
+      }
+      break;
   }
 
   SlotInsertionPoint assignment = SlotInsertionPointFor(aChild);

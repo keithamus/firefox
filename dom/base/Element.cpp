@@ -110,6 +110,7 @@
 #include "mozilla/dom/Sanitizer.h"
 #include "mozilla/dom/ScriptLoader.h"
 #include "mozilla/dom/ShadowRoot.h"
+#include "mozilla/dom/ShadowRootBinding.h"
 #include "mozilla/dom/StylePropertyMapReadOnly.h"
 #include "mozilla/dom/Text.h"
 #include "mozilla/dom/TreeIterator.h"

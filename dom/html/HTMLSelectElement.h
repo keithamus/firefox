@@ -34,6 +34,7 @@ class FormData;
 class HTMLElementOrLong;
 class HTMLOptionElementOrHTMLOptGroupElement;
 class HTMLSelectElement;
+class HTMLButtonElement;
 
 class MOZ_STACK_CLASS SafeOptionListMutation {
  public:
@@ -352,6 +353,8 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
   MOZ_CAN_RUN_SCRIPT void UpdateSelectedContent();
   MOZ_CAN_RUN_SCRIPT void ClearNonPrimarySelectedContents();
 
+  HTMLButtonElement* GetFirstButton() const;
+
   void SetupShadowTree();
 
   // Returns the text node that has the selected <option>'s text.
@@ -363,6 +366,7 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
   virtual ~HTMLSelectElement();
 
   friend class SafeOptionListMutation;
+  friend class HTMLOptionElement;
 
   // Helper Methods
   /**
@@ -408,21 +412,27 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
 
   // Adding options
   /**
-   * Insert option(s) into the options[] array and perform notifications
-   * @param aOptions the option or optgroup being added
+   * Insert option(s) into the options[] array and perform notifications.
+   * Traverses aOptions's subtree per the spec list-of-options algorithm.
+   * @param aOptions the node being added (option, optgroup, or wrapper)
    * @param aListIndex the index to start adding options into the list at
-   * @param aDepth the depth of aOptions (1=direct child of select ...)
+   * @param aIsDirectSelectChild true if aOptions is a direct child of the select
+   * @param aInsideOptGroup true if aOptions is inside an optgroup
    */
   void InsertOptionsIntoList(nsIContent* aOptions, int32_t aListIndex,
-                             int32_t aDepth, bool aNotify);
+                             bool aIsDirectSelectChild, bool aInsideOptGroup,
+                             bool aNotify);
   /**
-   * Remove option(s) from the options[] array
-   * @param aOptions the option or optgroup being added
+   * Remove option(s) from the options[] array.
+   * Traverses aOptions's subtree per the spec list-of-options algorithm.
+   * @param aOptions the node being removed (option, optgroup, or wrapper)
    * @param aListIndex the index to start removing options from the list at
-   * @param aDepth the depth of aOptions (1=direct child of select ...)
+   * @param aIsDirectSelectChild true if aOptions is a direct child of the select
+   * @param aInsideOptGroup true if aOptions is inside an optgroup
    */
   nsresult RemoveOptionsFromList(nsIContent* aOptions, int32_t aListIndex,
-                                 int32_t aDepth, bool aNotify);
+                                 bool aIsDirectSelectChild, bool aInsideOptGroup,
+                                 bool aNotify);
 
   // nsIConstraintValidation
   void UpdateBarredFromConstraintValidation();

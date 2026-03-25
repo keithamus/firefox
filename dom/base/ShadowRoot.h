@@ -5,6 +5,8 @@
 #ifndef mozilla_dom_shadowroot_h_
 #define mozilla_dom_shadowroot_h_
 
+#include <cstdint>
+
 #include "mozilla/BindgenUniquePtr.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/ServoBindingTypes.h"
@@ -12,6 +14,7 @@
 #include "mozilla/dom/DocumentFragment.h"
 #include "mozilla/dom/DocumentOrShadowRoot.h"
 #include "mozilla/dom/NameSpaceConstants.h"
+#include "mozilla/dom/ShadowRoot.h"
 #include "mozilla/dom/ShadowRootBinding.h"
 #include "nsCOMPtr.h"
 #include "nsCycleCollectionParticipant.h"
@@ -75,17 +78,19 @@ enum : uint32_t {
   // https://dom.spec.whatwg.org/#shadowroot-available-to-element-internals
   SHADOW_ROOT_IS_AVAILABLE_TO_ELEMENT_INTERNALS = SHADOW_ROOT_FLAG_BIT(6),
 
-  // Whether this is the <details> internal shadow tree
-  SHADOW_ROOT_IS_DETAILS_SHADOW_TREE = SHADOW_ROOT_FLAG_BIT(7),
+  // Whether this is an specific internal shadow tree
+  SHADOWROOT_INTERNAL_TREE_TYPE_LOW_BIT = SHADOW_ROOT_FLAG_BIT(7),
+  SHADOWROOT_INTERNAL_TREE_TYPE_MASK =
+      SHADOW_ROOT_FLAG_BIT(7) | SHADOW_ROOT_FLAG_BIT(8),
 
   // 2-bit field encoding the shadow root's custom element registry state.
   // See CustomElementRegistryState for the possible values.
-  SHADOWROOT_CUSTOM_ELEMENT_REGISTRY_LOW_BIT = SHADOW_ROOT_FLAG_BIT(8),
+  SHADOWROOT_CUSTOM_ELEMENT_REGISTRY_LOW_BIT = SHADOW_ROOT_FLAG_BIT(9),
   SHADOWROOT_CUSTOM_ELEMENT_REGISTRY_MASK =
-      SHADOW_ROOT_FLAG_BIT(8) | SHADOW_ROOT_FLAG_BIT(9),
+      SHADOW_ROOT_FLAG_BIT(9) | SHADOW_ROOT_FLAG_BIT(10),
 
   // Remaining bits are unused
-  SHADOW_ROOT_FLAGS_BITS_USED = 10
+  SHADOW_ROOT_FLAGS_BITS_USED = 11
 };
 
 #undef SHADOW_ROOT_FLAG_BIT
@@ -93,6 +98,12 @@ enum : uint32_t {
 // Make sure we have space for our bits
 ASSERT_NODE_FLAGS_SPACE(NODE_TYPE_SPECIFIC_BITS_OFFSET +
                         SHADOW_ROOT_FLAGS_BITS_USED);
+
+enum class ShadowRootInternalType : uint8_t {
+  None = 0,
+  Details = 1,
+  Select = 2,
+};
 
 class ShadowRoot final : public DocumentFragment, public DocumentOrShadowRoot {
   friend class DocumentOrShadowRoot;
@@ -202,8 +213,10 @@ class ShadowRoot final : public DocumentFragment, public DocumentOrShadowRoot {
     InsertSheetAt(SheetCount(), aSheet);
   }
 
-  bool IsDetailsShadowTree() const {
-    return HasFlag(SHADOW_ROOT_IS_DETAILS_SHADOW_TREE);
+  ShadowRootInternalType GetShadowRootInternalType() const {
+    return static_cast<ShadowRootInternalType>(
+        (GetFlags() & SHADOWROOT_INTERNAL_TREE_TYPE_MASK) /
+        SHADOWROOT_INTERNAL_TREE_TYPE_LOW_BIT);
   }
 
   /**
@@ -237,10 +250,18 @@ class ShadowRoot final : public DocumentFragment, public DocumentOrShadowRoot {
   /**
    * Re-assign the current main summary if it has changed.
    *
-   * Must be called only if IsDetailsShadowTree() is true.
+   * Must be called only if ShadowRootInternalType::Details.
    */
   enum class SummaryChangeReason { Deletion, Insertion };
   void MaybeReassignMainSummary(SummaryChangeReason);
+
+  /**
+   * Re-assign the current select button if it has changed.
+   *
+   * Must be called only if ShadowRootInternalType::Select.
+   */
+  enum class SelectButtonChangeReason { Deletion, Insertion };
+  void MaybeReassignSelectButton(SelectButtonChangeReason);
 
  public:
   void AddSlot(HTMLSlotElement* aSlot);

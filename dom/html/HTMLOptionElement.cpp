@@ -243,10 +243,37 @@ nsresult HTMLOptionElement::BindToTree(BindContext& aContext,
   // Our new parent might change :disabled/:enabled state.
   UpdateDisabledState(false);
 
+  // If we're being inserted into a select's subtree via a wrapper element
+  // (not through SafeOptionListMutation), rebuild the select's options list.
+  if (HTMLSelectElement* select = GetSelect()) {
+    HTMLOptionsCollection* options = select->GetOptions();
+    int32_t idx = -1;
+    options->GetOptionIndex(this, 0, true, &idx);
+    if (idx < 0) {
+      select->RebuildOptionsArray(IsInComposedDoc());
+    }
+  }
+
   return NS_OK;
 }
 
 void HTMLOptionElement::UnbindFromTree(UnbindContext& aContext) {
+  // If we're being removed from a select's subtree via a wrapper element
+  // (not through SafeOptionListMutation), rebuild the options list. At this
+  // point the option has been removed from the sibling chain (by DisconnectChild)
+  // but GetParent() is still set, so GetSelect() can find the ancestor select.
+  // RebuildOptionsArray traverses the tree via sibling links and correctly
+  // excludes this option since it's no longer in the sibling chain.
+  RefPtr<HTMLSelectElement> select = GetSelect();
+  if (select) {
+    HTMLOptionsCollection* options = select->GetOptions();
+    int32_t idx = -1;
+    options->GetOptionIndex(this, 0, true, &idx);
+    if (idx >= 0) {
+      select->RebuildOptionsArray(true);
+    }
+  }
+
   nsGenericHTMLElement::UnbindFromTree(aContext);
 
   // Our previous parent could have been involved in :disabled/:enabled state.
@@ -255,21 +282,18 @@ void HTMLOptionElement::UnbindFromTree(UnbindContext& aContext) {
 
 // Get the select content element that contains this option
 HTMLSelectElement* HTMLOptionElement::GetSelect() const {
-  nsIContent* parent = GetParent();
-  if (!parent) {
-    return nullptr;
+  for (nsIContent* node = GetParent(); node; node = node->GetParent()) {
+    if (auto* select = HTMLSelectElement::FromNode(node)) {
+      return select;
+    }
+    // Stop if we cross into a datalist, hr, or another option's subtree
+    if (node->IsHTMLElement(nsGkAtoms::datalist) ||
+        node->IsHTMLElement(nsGkAtoms::hr) ||
+        node->IsHTMLElement(nsGkAtoms::option)) {
+      return nullptr;
+    }
   }
-
-  HTMLSelectElement* select = HTMLSelectElement::FromNode(parent);
-  if (select) {
-    return select;
-  }
-
-  if (!parent->IsHTMLElement(nsGkAtoms::optgroup)) {
-    return nullptr;
-  }
-
-  return HTMLSelectElement::FromNodeOrNull(parent->GetParent());
+  return nullptr;
 }
 
 already_AddRefed<HTMLOptionElement> HTMLOptionElement::Option(

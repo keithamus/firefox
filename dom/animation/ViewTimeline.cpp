@@ -325,12 +325,19 @@ std::pair<double, double> ViewTimeline::IntervalForAttachmentRange(
 
   // Returns the percentage (in double) for this StyleAnimationValue based on
   // the full timeline range (i.e. `cover` for view-timeline).
+  const auto timelineRange = data->mEnd - data->mStart;
+  if (timelineRange == 0) {
+    // The cover range is degenerate (start == end), which can happen when the
+    // subject exactly fills the scrollport accounting for insets. Return a
+    // zero-length interval.
+    return {0.0, 0.0};
+  }
+
   auto computeNamedRangeEdgeAsPercentage =
       [&](const StyleGenericAnimationRangeValue<StyleLengthPercentage>&
               aValue) {
         const auto [nameStart, nameEnd] =
             IntervalForTimelineRangeName(aValue.name, *data);
-        const auto timelineRange = data->mEnd - data->mStart;
         const auto nameRange = nameEnd - nameStart;
         const auto positionInNameRange =
             nameStart + aValue.lp.Resolve(nameRange);
