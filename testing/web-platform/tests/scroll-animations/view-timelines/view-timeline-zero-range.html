@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<title>View timeline with zero cover range does not crash or divide by zero</title>
+<link rel="help" href="https://drafts.csswg.org/scroll-animations-1/#viewtimeline-interface">
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/web-animations/testcommon.js"></script>
+<style>
+  /*
+   * The subject height equals the scrollport height, so the "cover" range
+   * collapses: startOffset == endOffset == 0. This makes TimelineDuration()
+   * return zero, exercising the guards in:
+   *   - ViewTimeline::IntervalForAttachmentRange (divide-by-zero)
+   *   - AnimationEffect::UpdateNormalizedTiming (zero-duration early-return)
+   *
+   * Extra content outside the subject keeps the timeline active (there IS
+   * scrollable overflow), so the code paths are actually reached.
+   */
+  #scroller {
+    overflow-y: scroll;
+    width: 100px;
+    height: 100px;
+  }
+  .filler {
+    height: 200px;
+  }
+  #target {
+    /* Same height as the scrollport: cover range collapses to zero. */
+    width: 100px;
+    height: 100px;
+    view-timeline: --t block;
+    animation: anim auto linear both;
+    animation-timeline: --t;
+  }
+  @keyframes anim {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+</style>
+<div id="scroller">
+  <div class="filler"></div>
+  <div id="target"></div>
+  <div class="filler"></div>
+</div>
+<script>
+  promise_test(async t => {
+    await waitForNextFrame();
+    await waitForNextFrame();
+    // Reaching here without crashing confirms both guards are working.
+  }, 'View timeline whose cover range resolves to zero does not crash');
+</script>

@@ -367,6 +367,9 @@ void AnimationEffect::UpdateNormalizedTiming() {
       timeline->TimelineDuration(mAnimation->GetTimelineRange());
   MOZ_ASSERT(!timelineDuration.IsNull(),
              "We always have a timeline duration even for 0 duration");
+  if (timelineDuration.Value().IsZero()) {
+    return;
+  }
   mNormalizedTiming.emplace(mTiming.Normalize(timelineDuration.Value()));
 }
 
