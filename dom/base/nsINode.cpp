@@ -4272,7 +4272,54 @@ already_AddRefed<nsINode> nsINode::CloneAndAdopt(
 
     MOZ_ASSERT(newDoc != oldDoc);
     if (elem) {
-      // Adopted callback must be enqueued whenever a node’s
+      // Update custom element registry when adopting across documents.
+      // https://dom.spec.whatwg.org/#concept-node-adopt
+      // Elements with a scoped registry keep it. Elements with a null or global
+      // registry inherit from the new document, or from their parent when they
+      // have a parent that is not an exclusive DocumentFragment
+      // (https://github.com/whatwg/dom/pull/1437).
+      if (StaticPrefs::dom_scoped_custom_element_registries_enabled()) {
+        const CustomElementRegistryState state =
+            elem->GetCustomElementRegistryState();
+        if (state == CustomElementRegistryState::Scoped) {
+          // Scoped registries are kept across adoption, but the new document
+          // must be added to the registry's scoped document set per
+          // https://html.spec.whatwg.org/#scoped-document-set
+          RefPtr<CustomElementRegistry> scopedRegistry =
+              CustomElementRegistry::GetScopedRegistry(*elem);
+          if (scopedRegistry) {
+            scopedRegistry->AddToScopedDocumentSet(newDoc);
+          }
+        } else {
+          // The element's registry is null or a global custom element registry.
+          // Determine the registry to inherit from before narrowing to its
+          // effective global custom element registry.
+          nsINode* parent = elem->GetParentNode();
+          CustomElementRegistry* registry = nullptr;
+          if (state != CustomElementRegistryState::Null || !parent ||
+              (parent->IsDocumentFragment() && !parent->IsShadowRoot())) {
+            registry = newDoc->GetCustomElementRegistry();
+          } else if (Element* parentElem = Element::FromNode(parent)) {
+            registry = parentElem->GetCustomElementRegistry();
+          } else if (ShadowRoot* parentShadow = ShadowRoot::FromNode(parent)) {
+            registry = parentShadow->GetCustomElementRegistry();
+          } else if (parent->IsDocument()) {
+            registry = parent->AsDocument()->GetCustomElementRegistry();
+          }
+
+          // Effective global custom element registry: a scoped registry
+          // resolves to null, a global one to itself.
+          CustomElementRegistry* effectiveGlobal =
+              (registry && !registry->IsScoped()) ? registry : nullptr;
+          if (effectiveGlobal) {
+            elem->SetCustomElementRegistry(effectiveGlobal);
+          } else if (state == CustomElementRegistryState::Global) {
+            elem->SetKeepCustomElementRegistryNull();
+          }
+        }
+      }
+
+      // Adopted callback must be enqueued whenever a node's
       // shadow-including inclusive descendants that is custom.
       CustomElementData* data = elem->GetCustomElementData();
       if (data && data->mState == CustomElementData::State::eCustom) {
@@ -4282,6 +4329,27 @@ already_AddRefed<nsINode> nsINode::CloneAndAdopt(
 
         nsContentUtils::EnqueueLifecycleCallback(ElementCallbackType::eAdopted,
                                                  elem, args);
+      }
+    } else if (ShadowRoot* shadow = ShadowRoot::FromNode(aNode)) {
+      // https://dom.spec.whatwg.org/#concept-node-adopt step 3.2
+      // If the shadow root's registry is null and keep custom element registry
+      // null is false, or its registry is a global custom element registry,
+      // set its registry to the new document's effective global registry.
+      if (StaticPrefs::dom_scoped_custom_element_registries_enabled()) {
+        const CustomElementRegistryState state =
+            shadow->GetCustomElementRegistryState();
+        const bool isNullNonKeep = state == CustomElementRegistryState::Null &&
+                                   !shadow->KeepCustomElementRegistryNull();
+        const bool isGlobal = state == CustomElementRegistryState::Global;
+        if (isNullNonKeep || isGlobal) {
+          if (newDoc->GetEffectiveGlobalCustomElementRegistry()) {
+            shadow->SetCustomElementRegistryState(
+                CustomElementRegistryState::Global);
+          } else {
+            shadow->SetCustomElementRegistryState(
+                CustomElementRegistryState::Null);
+          }
+        }
       }
     }
 
@@ -4471,6 +4539,12 @@ already_AddRefed<nsINode> nsINode::CloneAndAdopt(
         return nullptr;
       }
       newShadowRoot->SetIsDeclarative(originalShadowRoot->IsDeclarative());
+      // https://dom.spec.whatwg.org/#concept-node-clone step 6.6: copy the
+      // source shadow root's keep custom element registry null.
+      if (StaticPrefs::dom_scoped_custom_element_registries_enabled() &&
+          originalShadowRoot->KeepCustomElementRegistryNull()) {
+        newShadowRoot->SetKeepCustomElementRegistryNull();
+      }
       if (originalShadowRoot->IsAvailableToElementInternals()) {
         newShadowRoot->SetAvailableToElementInternals();
       }

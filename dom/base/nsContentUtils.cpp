@@ -14049,6 +14049,13 @@ nsIContent* nsContentUtils::AttachDeclarativeShadowRoot(
   if (shadowRoot) {
     shadowRoot->SetIsDeclarative(
         nsGenericHTMLFormControlElement::ShadowRootDeclarative::Yes);
+    // https://html.spec.whatwg.org/#parsing-main-inhead step 7: if templateStartTag
+    // has a shadowrootcustomelementregistry attribute, set shadow's keep custom
+    // element registry null to true.
+    if (StaticPrefs::dom_scoped_custom_element_registries_enabled() &&
+        aCustomElementRegistry) {
+      shadowRoot->SetKeepCustomElementRegistryNull();
+    }
     // https://html.spec.whatwg.org/#parsing-main-inhead:available-to-element-internals
     shadowRoot->SetAvailableToElementInternals();
     shadowRoot->SetReferenceTarget(aReferenceTarget);
