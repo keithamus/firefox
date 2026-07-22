@@ -746,6 +746,23 @@ bool CustomElementRegistry::IsInScopedRegistryMap(nsINode& aNode) {
   return gScopedRegistryMap && gScopedRegistryMap->Contains(&aNode);
 }
 
+/* https://html.spec.whatwg.org/#scoped-document-set */
+void CustomElementRegistry::AddToScopedDocumentSet(Document* aDoc) {
+  MOZ_ASSERT(mIsScoped);
+  MOZ_ASSERT(aDoc);
+  nsWeakPtr weak = do_GetWeakReference(aDoc);
+  if (!weak) {
+    return;
+  }
+  // Ordered set: only append if not already present.
+  for (const auto& entry : mScopedDocumentSet) {
+    if (entry.get() == weak.get()) {
+      return;
+    }
+  }
+  mScopedDocumentSet.AppendElement(std::move(weak));
+}
+
 namespace {
 
 class CandidateFinder {
@@ -753,6 +770,8 @@ class CandidateFinder {
   CandidateFinder(nsTHashSet<RefPtr<nsIWeakReference>>& aCandidates,
                   Document* aDoc);
   nsTArray<nsCOMPtr<Element>> OrderedCandidates();
+  void CollectCandidatesFromDocument(Document* aDoc,
+                                     nsTArray<nsCOMPtr<Element>>& aResult);
 
  private:
   nsCOMPtr<Document> mDoc;
@@ -774,6 +793,25 @@ CandidateFinder::CandidateFinder(
   }
 }
 
+void CandidateFinder::CollectCandidatesFromDocument(
+    Document* aDoc, nsTArray<nsCOMPtr<Element>>& aResult) {
+  MOZ_ASSERT(aDoc);
+  for (nsINode* node : ShadowIncludingTreeIterator(*aDoc)) {
+    Element* element = Element::FromNode(node);
+    if (!element) {
+      continue;
+    }
+
+    nsCOMPtr<Element> elem;
+    if (mCandidates.Remove(element, getter_AddRefs(elem))) {
+      aResult.AppendElement(std::move(elem));
+      if (mCandidates.Count() == 0) {
+        break;
+      }
+    }
+  }
+}
+
 nsTArray<nsCOMPtr<Element>> CandidateFinder::OrderedCandidates() {
   if (mCandidates.Count() == 1) {
     // Fast path for one candidate.
@@ -784,21 +822,7 @@ nsTArray<nsCOMPtr<Element>> CandidateFinder::OrderedCandidates() {
   }
 
   nsTArray<nsCOMPtr<Element>> orderedElements(mCandidates.Count());
-  for (nsINode* node : ShadowIncludingTreeIterator(*mDoc)) {
-    Element* element = Element::FromNode(node);
-    if (!element) {
-      continue;
-    }
-
-    nsCOMPtr<Element> elem;
-    if (mCandidates.Remove(element, getter_AddRefs(elem))) {
-      orderedElements.AppendElement(std::move(elem));
-      if (mCandidates.Count() == 0) {
-        break;
-      }
-    }
-  }
-
+  CollectCandidatesFromDocument(mDoc, orderedElements);
   return orderedElements;
 }
 
@@ -819,8 +843,6 @@ void CustomElementRegistry::UpgradeCandidates(
   //    whose namespace is the HTML namespace, and whose local name is
   //    localName, in shadow-including tree order. Additionally, if name is not
   //    localName, only include elements whose is value is equal to name.
-  // TODO(keithamus): The "whose custom element registry is registry" filter is
-  // not yet implemented (scoped registries).
   mozilla::UniquePtr<nsTHashSet<RefPtr<nsIWeakReference>>> candidates;
   if (mCandidatesMap.Remove(aKey, &candidates)) {
     MOZ_ASSERT(candidates);
@@ -828,10 +850,27 @@ void CustomElementRegistry::UpgradeCandidates(
         docGroup->CustomElementReactionsStack();
 
     CandidateFinder finder(*candidates, mWindow->GetExtantDoc());
-    // 2. For each element element of upgradeCandidates: enqueue a custom
-    //    element upgrade reaction given element and definition.
-    for (auto& elem : finder.OrderedCandidates()) {
-      reactionsStack->EnqueueUpgradeReaction(elem, aDefinition);
+
+    auto enqueue = [&](nsTArray<nsCOMPtr<Element>>& aElements) {
+      for (auto& elem : aElements) {
+        reactionsStack->EnqueueUpgradeReaction(elem, aDefinition);
+      }
+    };
+    if (mIsScoped && !mScopedDocumentSet.IsEmpty()) {
+      for (const auto& weakDoc : mScopedDocumentSet) {
+        nsCOMPtr<Document> doc = do_QueryReferent(weakDoc);
+        if (!doc) {
+          continue;
+        }
+        nsTArray<nsCOMPtr<Element>> ordered;
+        finder.CollectCandidatesFromDocument(doc, ordered);
+        // 2. For each element element of upgradeCandidates: enqueue a custom
+        //    element upgrade reaction given element and definition.
+        enqueue(ordered);
+      }
+    } else {
+      nsTArray<nsCOMPtr<Element>> ordered = finder.OrderedCandidates();
+      enqueue(ordered);
     }
   }
 }
@@ -1369,10 +1408,10 @@ void CustomElementRegistry::Initialize(nsINode& aRoot, ErrorResult& aRv) {
     // Step 4.2: If inclusiveDescendant's custom element registry is null:
     if (!registry) {
       // Step 4.2.1: Set inclusiveDescendant's custom element registry to this.
+      // Step 4.2.2: If this's is scoped is true, then append
+      //             inclusiveDescendant's node document to this's scoped
+      //             document set.
       element->SetCustomElementRegistry(this);
-      // TODO(keithamus, bug 2018913): Step 4.2.2: If this's is scoped is true,
-      // then append inclusiveDescendant's node document to this's scoped
-      // document set.
     } else if (registry != this) {
       // Step 4.3: If inclusiveDescendant's custom element registry is not this,
       //           then continue.
