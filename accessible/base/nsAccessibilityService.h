@@ -24,6 +24,7 @@
 class nsImageFrame;
 class nsIArray;
 class nsITreeView;
+struct nsRoleMapEntry;
 
 namespace mozilla {
 
@@ -536,6 +537,16 @@ class nsAccessibilityService final : public mozilla::a11y::DocManager,
     // with nsAccUtils::SetLiveContainerAttributes.
     return nullptr;
   }
+
+  /**
+   * The ARIA role map entry which the focusgroup attribute of aElement implies,
+   * for a focus group owner or one of its items, or null. An explicit role and
+   * the native semantics of the element take precedence, apart from the button
+   * role which an implied item role replaces.
+   * https://w3c.github.io/html-aam/#el-focusgroup
+   */
+  const nsRoleMapEntry* ImpliedFocusGroupRoleMap(
+      mozilla::dom::Element& aElement) const;
 
   const mozilla::a11y::MarkupMapInfo* GetMarkupMapInfoFor(
       mozilla::a11y::Accessible* aAcc) const;

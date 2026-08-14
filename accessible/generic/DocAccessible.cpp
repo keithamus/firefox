@@ -2153,6 +2153,13 @@ bool DocAccessible::UpdateAccessibleOnAttrChange(dom::Element* aElement,
     return true;
   }
 
+  if (aAttribute == nsGkAtoms::focusgroup) {
+    // The focusgroup attribute implies a role for the element and for the items
+    // of its focus group, so the subtree needs to be recreated.
+    RecreateAccessible(aElement);
+    return true;
+  }
+
   if (aAttribute == nsGkAtoms::multiple) {
     if (dom::HTMLSelectElement* select =
             dom::HTMLSelectElement::FromNode(aElement)) {

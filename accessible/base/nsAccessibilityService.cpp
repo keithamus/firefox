@@ -65,11 +65,13 @@
 #include "mozilla/ProfilerMarkers.h"
 #include "mozilla/RefPtr.h"
 #include "mozilla/Services.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/a11y/AccTypes.h"
 #include "mozilla/dom/ARIANotifyMixinBinding.h"
 #include "mozilla/dom/ContentParent.h"
 #include "mozilla/dom/DOMStringList.h"
 #include "mozilla/dom/EventTarget.h"
+#include "mozilla/dom/FocusGroup.h"
 #include "mozilla/dom/HTMLTableElement.h"
 #include "nsExceptionHandler.h"
 #include "nsIObserverService.h"
@@ -1492,6 +1494,9 @@ LocalAccessible* nsAccessibilityService::CreateAccessible(
   }
 
   const nsRoleMapEntry* roleMapEntry = aria::GetRoleMap(content->AsElement());
+  if (!roleMapEntry) {
+    roleMapEntry = ImpliedFocusGroupRoleMap(*content->AsElement());
+  }
 
   if (roleMapEntry && (roleMapEntry->Is(nsGkAtoms::presentation) ||
                        roleMapEntry->Is(nsGkAtoms::none))) {
@@ -1948,6 +1953,67 @@ nsAccessibilityService::CreateAccessibleByFrameType(nsIFrame* aFrame,
   }
 
   return newAcc.forget();
+}
+
+// https://w3c.github.io/html-aam/#el-focusgroup
+const nsRoleMapEntry* nsAccessibilityService::ImpliedFocusGroupRoleMap(
+    dom::Element& aElement) const {
+  if (!StaticPrefs::dom_focusgroup_enabled()) {
+    return nullptr;
+  }
+  // The implied role replaces the generic role of a container, and the button
+  // role of a focus group item, but never the semantics of an element such as
+  // a or input.
+  const bool isButton = aElement.IsHTMLElement(nsGkAtoms::button);
+  if (!isButton && GetMarkupMapInfoFor(&aElement)) {
+    return nullptr;
+  }
+
+  const dom::FocusGroupState state = dom::FocusGroup::GetState(aElement);
+  if (state.IsOwner()) {
+    if (isButton) {
+      return nullptr;
+    }
+    switch (state.mBehavior) {
+      case dom::FocusGroupBehavior::Toolbar:
+        return aria::GetRoleMap(nsGkAtoms::toolbar);
+      case dom::FocusGroupBehavior::Tablist:
+        return aria::GetRoleMap(nsGkAtoms::tablist);
+      case dom::FocusGroupBehavior::Radiogroup:
+        return aria::GetRoleMap(nsGkAtoms::radiogroup);
+      case dom::FocusGroupBehavior::Listbox:
+        return aria::GetRoleMap(nsGkAtoms::listbox);
+      case dom::FocusGroupBehavior::Menu:
+        return aria::GetRoleMap(nsGkAtoms::menu);
+      case dom::FocusGroupBehavior::Menubar:
+        return aria::GetRoleMap(nsGkAtoms::menubar);
+      case dom::FocusGroupBehavior::None:
+        break;
+    }
+    return nullptr;
+  }
+
+  if (!dom::FocusGroup::IsItem(aElement)) {
+    return nullptr;
+  }
+  dom::FocusGroupState ownerState;
+  if (!dom::FocusGroup::GetOwner(aElement, &ownerState)) {
+    return nullptr;
+  }
+  switch (ownerState.mBehavior) {
+    case dom::FocusGroupBehavior::Tablist:
+      return aria::GetRoleMap(nsGkAtoms::tab);
+    case dom::FocusGroupBehavior::Radiogroup:
+      return aria::GetRoleMap(nsGkAtoms::radio);
+    case dom::FocusGroupBehavior::Listbox:
+      return aria::GetRoleMap(nsGkAtoms::option);
+    case dom::FocusGroupBehavior::Menu:
+    case dom::FocusGroupBehavior::Menubar:
+      return aria::GetRoleMap(nsGkAtoms::menuitem);
+    default:
+      // The items of a toolbar keep their own role.
+      return nullptr;
+  }
 }
 
 void nsAccessibilityService::MarkupAttributes(
