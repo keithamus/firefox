@@ -773,6 +773,7 @@ STATIC_ATOMS = [
     Atom("nohref", "nohref"),
     Atom("noinitialselection", "noinitialselection"),
     Atom("nomodule", "nomodule"),
+    Atom("nomemory", "nomemory"),
     Atom("nonce", "nonce"),
     Atom("none", "none"),
     Atom("nonnative", "nonnative"),

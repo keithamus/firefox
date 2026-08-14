@@ -62,6 +62,7 @@
 #include "mozilla/dom/EditContext.h"
 #include "mozilla/dom/ElementInlines.h"
 #include "mozilla/dom/Event.h"
+#include "mozilla/dom/FocusGroup.h"
 #include "mozilla/dom/FrameLoaderBinding.h"
 #include "mozilla/dom/HTMLDialogElement.h"
 #include "mozilla/dom/HTMLInputElement.h"
@@ -4721,6 +4722,23 @@ nsresult EventStateManager::PostHandleEvent(nsPresContext* aPresContext,
       }
       break;
     }
+    case eKeyDown: {
+      // Directional navigation within a focus group is the default action of a
+      // keydown event for an arrow key.
+      if (*aStatus == nsEventStatus_eConsumeNoDefault ||
+          aEvent->DefaultPrevented() || !aEvent->IsTrusted()) {
+        break;
+      }
+      nsFocusManager* focusManager = nsFocusManager::GetFocusManager();
+      RefPtr<Element> focusedElement =
+          focusManager ? focusManager->GetFocusedElement() : nullptr;
+      if (focusedElement && FocusGroup::HandleKeyDown(
+                                *focusedElement, *aEvent->AsKeyboardEvent())) {
+        *aStatus = nsEventStatus_eConsumeNoDefault;
+      }
+      break;
+    }
+
     case eKeyUp:
       // If space key is released, we need to inactivate the element which was
       // activated by preceding space key down.

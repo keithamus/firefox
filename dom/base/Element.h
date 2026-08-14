@@ -647,6 +647,12 @@ class Element : public FragmentOrElement {
   void SetAssociatedPopover(nsGenericHTMLElement& aPopover);
   nsGenericHTMLElement* GetAssociatedPopover() const;
 
+  /** The last item of this focus group owner's scope which was focused, see
+   * https://html.spec.whatwg.org/multipage/interaction.html#last-focused-item
+   */
+  void SetFocusGroupLastFocusedItem(Element& aItem);
+  Element* GetFocusGroupLastFocusedItem() const;
+
   // https://html.spec.whatwg.org/multipage/popover.html#topmost-popover-ancestor
   Element* GetTopmostPopoverAncestor(const Element* aInvoker,
                                      bool isPopover) const;

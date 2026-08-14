@@ -215,6 +215,12 @@ class FragmentOrElement : public nsIContent {
     nsWeakPtr mAssociatedPopover;
 
     /**
+     * The last focused item of this element's focus group, see
+     * https://html.spec.whatwg.org/multipage/interaction.html#last-focused-item
+     */
+    nsWeakPtr mFocusGroupLastFocusedItem;
+
+    /**
      * CustomStates for the element.
      */
     nsTArray<RefPtr<nsAtom>> mCustomStates;

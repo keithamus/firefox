@@ -6087,6 +6087,19 @@ nsGenericHTMLElement* Element::GetAssociatedPopover() const {
   return nullptr;
 }
 
+void Element::SetFocusGroupLastFocusedItem(Element& aItem) {
+  ExtendedDOMSlots()->mFocusGroupLastFocusedItem = do_GetWeakReference(&aItem);
+}
+
+Element* Element::GetFocusGroupLastFocusedItem() const {
+  if (const nsExtendedDOMSlots* slots = GetExistingExtendedDOMSlots()) {
+    nsCOMPtr<Element> item =
+        do_QueryReferent(slots->mFocusGroupLastFocusedItem);
+    return item;
+  }
+  return nullptr;
+}
+
 // https://html.spec.whatwg.org/#topmost-popover-ancestor
 Element* Element::GetTopmostPopoverAncestor(const Element* aInvoker,
                                             bool isPopover) const {

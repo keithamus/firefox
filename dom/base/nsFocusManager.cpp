@@ -33,6 +33,7 @@
 #include "mozilla/dom/DocumentInlines.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/ElementBinding.h"
+#include "mozilla/dom/FocusGroup.h"
 #include "mozilla/dom/HTMLAreaElement.h"
 #include "mozilla/dom/HTMLImageElement.h"
 #include "mozilla/dom/HTMLInputElement.h"
@@ -2900,6 +2901,7 @@ void nsFocusManager::Focus(
   if (elementToFocus && !mFocusedElement &&
       GetFocusedBrowsingContext() == aWindow->GetBrowsingContext()) {
     mFocusedElement = elementToFocus;
+    FocusGroup::RememberFocusedItem(*elementToFocus);
 
     nsIContent* focusedNode = aWindow->GetFocusedElement();
     const bool sendFocusEvent = elementToFocus->IsInComposedDoc() &&
@@ -4376,6 +4378,7 @@ nsIContent* nsFocusManager::GetNextTabbableContentInScope(
     if (nsIFrame* frame = aOwner->GetPrimaryFrame()) {
       auto focusable = frame->IsFocusable();
       if (focusable && focusable.mTabIndex >= 0 &&
+          !FocusGroup::IsExcludedFromSequentialFocusNavigation(*aOwner) &&
           (!aForDocumentNavigation || aReachedToEndForDocumentNavigation)) {
         return aOwner;
       }
@@ -4427,6 +4430,12 @@ nsIContent* nsFocusManager::GetNextTabbableContentInScope(
         tabIndex = frame->IsFocusable().mTabIndex;
       }
       if (tabIndex < 0 || !(aIgnoreTabIndex || tabIndex == aCurrentTabIndex)) {
+        continue;
+      }
+      // A scope owner which is excluded is handled below, so that the contents
+      // of its scope stay reachable.
+      if (!IsScopeOwner(iterContent) &&
+          FocusGroup::IsExcludedFromSequentialFocusNavigation(*iterContent)) {
         continue;
       }
 
@@ -4501,6 +4510,7 @@ nsIContent* nsFocusManager::GetNextTabbableContentInScope(
     if (nsIFrame* frame = aOwner->GetPrimaryFrame()) {
       auto focusable = frame->IsFocusable();
       if (focusable && focusable.mTabIndex >= 0 &&
+          !FocusGroup::IsExcludedFromSequentialFocusNavigation(*aOwner) &&
           (!aForDocumentNavigation || aReachedToEndForDocumentNavigation)) {
         return aOwner;
       }
@@ -4823,6 +4833,14 @@ nsresult nsFocusManager::GetNextTabbableContent(
         bool focusableHostSlot;
         int32_t tabIndex = ScopeOwnerTabIndexValue(currentTopLevelScopeOwner,
                                                    &focusableHostSlot);
+        // A host or slot which sequential focus navigation skips because it is
+        // a focus group item behaves like a non-focusable one, so that the
+        // entry element of its scope stays reachable.
+        if (focusableHostSlot &&
+            FocusGroup::IsExcludedFromSequentialFocusNavigation(
+                *currentTopLevelScopeOwner)) {
+          focusableHostSlot = false;
+        }
         // Host or slot itself isn't focusable or going backwards, enter its
         // scope.
         if ((!aForward || !focusableHostSlot) && tabIndex >= 0 &&
@@ -4872,6 +4890,11 @@ nsresult nsFocusManager::GetNextTabbableContent(
       //          > 0 can be tabbed to in the order specified by this value
       // clang-format on
       int32_t tabIndex = frame->IsFocusable().mTabIndex;
+      if (tabIndex >= 0 && currentContent &&
+          FocusGroup::IsExcludedFromSequentialFocusNavigation(
+              *currentContent)) {
+        tabIndex = -1;
+      }
 
       LOGCONTENTNAVIGATION("Next Tabbable %s:", frame->GetContent());
       LOGFOCUSNAVIGATION(
