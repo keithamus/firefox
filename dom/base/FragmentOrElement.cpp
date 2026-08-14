@@ -734,6 +734,7 @@ void FragmentOrElement::nsExtendedDOMSlots::UnlinkExtendedSlots(
   mAttrElementsMap.Clear();
   mRadioGroupContainer = nullptr;
   mPart = nullptr;
+  mFocusGroup = nullptr;
 }
 
 void FragmentOrElement::nsExtendedDOMSlots::TraverseExtendedSlots(
@@ -754,6 +755,9 @@ void FragmentOrElement::nsExtendedDOMSlots::TraverseExtendedSlots(
 
   NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(aCb, "mSlots->mPart");
   aCb.NoteXPCOMChild(mPart.get());
+
+  NS_CYCLE_COLLECTION_NOTE_EDGE_NAME(aCb, "mSlots->mFocusGroup");
+  aCb.NoteXPCOMChild(mFocusGroup.get());
 
   for (auto& tableEntry : mAttrElementsMap) {
     auto& [explicitlySetElements, cachedAttrElements] =

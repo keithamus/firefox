@@ -1382,6 +1382,13 @@ class Element : public FragmentOrElement {
 
   nsDOMTokenList* ClassList();
   nsDOMTokenList* Part();
+  nsDOMTokenList* FocusGroup();
+  bool FocusGroupStart() const {
+    return GetBoolAttr(nsGkAtoms::focusgroupstart);
+  }
+  void SetFocusGroupStart(bool aValue, ErrorResult& aRv) {
+    aRv = SetBoolAttr(nsGkAtoms::focusgroupstart, aValue);
+  }
 
   nsDOMAttributeMap* Attributes();
 
@@ -2333,6 +2340,9 @@ class Element : public FragmentOrElement {
    * The supported values of blocking attribute for use with nsDOMTokenList.
    */
   static const DOMTokenListSupportedToken sSupportedBlockingValues[];
+
+  // Supported tokens for the focusgroup attribute.
+  static const DOMTokenListSupportedToken sSupportedFocusGroupTokens[];
 
   /**
    * Common implementation for SetAttr overloads. Takes a callback to perform

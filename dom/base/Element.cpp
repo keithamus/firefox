@@ -348,6 +348,10 @@ namespace mozilla::dom {
 const DOMTokenListSupportedToken Element::sSupportedBlockingValues[] = {
     "render", nullptr};
 
+const DOMTokenListSupportedToken Element::sSupportedFocusGroupTokens[] = {
+    "toolbar", "tablist", "radiogroup", "listbox",  "menu", "menubar", "wrap",
+    "nowrap",  "inline",  "block",      "nomemory", "none", nullptr};
+
 nsDOMAttributeMap* Element::Attributes() {
   nsDOMSlots* slots = DOMSlots();
   if (!slots->mAttributeMap) {
@@ -751,6 +755,15 @@ nsDOMTokenList* Element::Part() {
     slots->mPart = new nsDOMTokenList(this, nsGkAtoms::part);
   }
   return slots->mPart;
+}
+
+nsDOMTokenList* Element::FocusGroup() {
+  nsExtendedDOMSlots* slots = ExtendedDOMSlots();
+  if (!slots->mFocusGroup) {
+    slots->mFocusGroup = new nsDOMTokenList(this, nsGkAtoms::focusgroup,
+                                            sSupportedFocusGroupTokens);
+  }
+  return slots->mFocusGroup;
 }
 
 void Element::RecompileScriptEventListeners() {

@@ -263,6 +263,9 @@ class FragmentOrElement : public nsIContent {
     /** An object implementing the .part property for this element. */
     RefPtr<nsDOMTokenList> mPart;
 
+    /** An object implementing the .focusGroup property for this element. */
+    RefPtr<nsDOMTokenList> mFocusGroup;
+
     /**
      * Explicitly set attr-element, see
      * https://html.spec.whatwg.org/#explicitly-set-attr-element

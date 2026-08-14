@@ -179,6 +179,10 @@ interface mixin HTMLOrSVGOrMathMLElement {
 
   [CEReactions, SetterThrows, Pure] attribute boolean autofocus;
   [CEReactions, SetterThrows, Pure] attribute long tabIndex;
+  [SameObject, PutForwards=value, Pref="dom.focusgroup.enabled"]
+  readonly attribute DOMTokenList focusGroup;
+  [CEReactions, SetterThrows, Pref="dom.focusgroup.enabled"]
+  attribute boolean focusGroupStart;
   [Throws, NeedsCallerType] undefined focus(optional FocusOptions options = {});
   [Throws] undefined blur();
 };
