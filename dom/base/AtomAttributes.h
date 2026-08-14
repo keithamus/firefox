@@ -29,6 +29,7 @@
 #define NS_IS_ATOM_ARRAY_ATTRIBUTE(aAtom)       \
   (aAtom == nsGkAtoms::_class ||                \
    aAtom == nsGkAtoms::part ||                  \
+   aAtom == nsGkAtoms::focusgroup ||            \
    aAtom == nsGkAtoms::aria_actions ||          \
    aAtom == nsGkAtoms::aria_controls ||         \
    aAtom == nsGkAtoms::aria_describedby ||      \

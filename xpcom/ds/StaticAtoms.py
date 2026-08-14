@@ -483,6 +483,8 @@ STATIC_ATOMS = [
     Atom("flowlength", "flowlength"),
     Atom("focus", "focus"),
     Atom("focused", "focused"),
+    Atom("focusgroup", "focusgroup"),
+    Atom("focusgroupstart", "focusgroupstart"),
     Atom("followanchor", "followanchor"),
     Atom("following", "following"),
     Atom("followingSibling", "following-sibling"),

@@ -719,6 +719,8 @@ class nsHtml5AttributeName {
   static nsHtml5AttributeName* ATTR_COLUMNALIGN;
   static nsHtml5AttributeName* ATTR_COLUMNSPACING;
   static nsHtml5AttributeName* ATTR_COLUMNWIDTH;
+  static nsHtml5AttributeName* ATTR_FOCUSGROUPSTART;
+  static nsHtml5AttributeName* ATTR_FOCUSGROUP;
   static nsHtml5AttributeName* ATTR_GROUPALIGN;
   static nsHtml5AttributeName* ATTR_INPUTMODE;
   static nsHtml5AttributeName* ATTR_ONSUBMIT;
