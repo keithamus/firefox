@@ -64,6 +64,11 @@ const accessibleSpec = generateActorSpec({
       type: "descriptionChange",
       description: Arg(0, "string"),
     },
+    "text-equiv-sources-change": {
+      type: "textEquivSourcesChange",
+      nameSources: Arg(0, "nullable:json"),
+      descriptionSources: Arg(1, "nullable:json"),
+    },
     "states-change": {
       type: "statesChange",
       states: Arg(0, "array:string"),

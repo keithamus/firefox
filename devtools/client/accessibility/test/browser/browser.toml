@@ -47,6 +47,8 @@ skip-if = [
 
 ["browser_accessibility_sidebar_dom_nodes.js"]
 
+["browser_accessibility_sidebar_name_sources.js"]
+
 ["browser_accessibility_simulation.js"]
 
 ["browser_accessibility_tabbing_order_highlighter.js"]

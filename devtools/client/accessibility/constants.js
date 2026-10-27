@@ -88,11 +88,13 @@ exports.FILTERS = {
 // Ordered accessible properties to be displayed by the accessible component.
 exports.ORDERED_PROPS = [
   "name",
+  "nameSources",
   "role",
   "actions",
   "value",
   "DOMNode",
   "description",
+  "descriptionSources",
   "keyboardShortcut",
   "childCount",
   "indexInParent",
@@ -101,12 +103,16 @@ exports.ORDERED_PROPS = [
   "attributes",
 ];
 
+// Accessible properties listing the sources of a computed name or description.
+exports.TEXT_EQUIV_SOURCES_PROPS = ["nameSources", "descriptionSources"];
+
 // Accessible events (emitted by accessible front) that the accessible component
 // listens to for a current accessible.
 exports.ACCESSIBLE_EVENTS = [
   "actions-change",
   "attributes-change",
   "description-change",
+  "text-equiv-sources-change",
   "name-change",
   "reorder",
   "shortcut-change",

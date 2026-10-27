@@ -48,6 +48,10 @@ class xpcAccessible : public nsIAccessible {
   NS_IMETHOD GetName(nsAString& aName) final;
   NS_IMETHOD GetLanguage(nsAString& aLanguage) final;
   NS_IMETHOD GetValue(nsAString& aValue) final;
+  NS_IMETHOD GetNameSources(
+      nsTArray<RefPtr<nsIAccessibleTextEquivSource>>& aSources) final;
+  NS_IMETHOD GetDescriptionSources(
+      nsTArray<RefPtr<nsIAccessibleTextEquivSource>>& aSources) final;
 
   NS_IMETHOD GetAccessKey(nsAString& aAccessKey) final;
   NS_IMETHOD GetKeyboardShortcut(nsAString& aKeyBinding) final;

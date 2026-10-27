@@ -79,7 +79,13 @@ async function shutdownAccessibility(browser) {
   await SpecialPowers.spawn(browser, [], waitForAccessibilityShutdown);
 }
 
-const EXPANDABLE_PROPS = ["actions", "states", "attributes"];
+const EXPANDABLE_PROPS = [
+  "actions",
+  "nameSources",
+  "descriptionSources",
+  "states",
+  "attributes",
+];
 
 /**
  * Add a new test tab in the browser and load the given url.
@@ -588,6 +594,35 @@ async function selectProperty(doc, id) {
   });
 
   return node;
+}
+
+/**
+ * Get the sidebar property item with the given label.
+ *
+ * @param  {Document} doc   accessibility inspector panel document.
+ * @param  {string}   label label of the property.
+ * @return {DOMNode}        Node that corresponds to the property, if any.
+ */
+function getPropertyItem(doc, label) {
+  const labelEl = Array.from(
+    doc.querySelectorAll("#accessibility-properties .object-label")
+  ).find(el => el.textContent === label);
+  if (!labelEl) {
+    return null;
+  }
+  return labelEl.closest(".node");
+}
+
+/**
+ * Get the displayed value of the sidebar property with the given label.
+ *
+ * @param  {Document} doc   accessibility inspector panel document.
+ * @param  {string}   label label of the property.
+ * @return {string}         Displayed value, if any.
+ */
+function getPropertyValue(doc, label) {
+  return getPropertyItem(doc, label)?.querySelector(".object-value")
+    ?.textContent;
 }
 
 /**

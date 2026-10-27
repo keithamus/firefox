@@ -28,6 +28,20 @@ add_task(async function () {
     role: "button",
     value: "",
     description: "Accessibility Test",
+    nameSources: [
+      { source: "aria-labelledby", value: null, used: false },
+      { source: "aria-label", value: null, used: false },
+      { source: "native", value: null, used: false },
+      { source: "contents", value: "Accessible Button", used: true },
+      { source: "title", value: null, used: false },
+      { source: "content-alt", value: null, used: false },
+    ],
+    descriptionSources: [
+      { source: "aria-describedby", value: "Accessibility Test", used: true },
+      { source: "aria-description", value: null, used: false },
+      { source: "native", value: null, used: false },
+      { source: "title", value: null, used: false },
+    ],
     keyboardShortcut: modifiers + "b",
     childCount: 1,
     domNodeType: 1,
@@ -61,6 +75,17 @@ add_task(async function () {
   const controlNode = await walker.querySelector(walker.rootNode, "#control");
   const labelAccessibleFront = await a11yWalker.getAccessibleFor(labelNode);
   const controlAccessibleFront = await a11yWalker.getAccessibleFor(controlNode);
+  await controlAccessibleFront.hydrate();
+  checkA11yFront(controlAccessibleFront, {
+    nameSources: [
+      { source: "aria-labelledby", value: null, used: false },
+      { source: "aria-label", value: null, used: false },
+      { source: "native", value: "Label", used: true },
+      { source: "contents", value: null, used: false },
+      { source: "title", value: null, used: false },
+      { source: "content-alt", value: null, used: false },
+    ],
+  });
   const docAccessibleFront = await a11yWalker.getAccessibleFor(walker.rootNode);
   const labelRelations = await labelAccessibleFront.getRelations();
   is(labelRelations.length, 2, "Label has correct number of relations");

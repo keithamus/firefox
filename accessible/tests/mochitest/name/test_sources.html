@@ -1,0 +1,164 @@
+<html>
+
+<head>
+  <title>nsIAccessible::nameSources and descriptionSources</title>
+
+  <link rel="stylesheet"
+        type="text/css" href="chrome://mochikit/content/tests/SimpleTest/test.css" />
+
+  <script src="chrome://mochikit/content/tests/SimpleTest/SimpleTest.js"></script>
+
+  <script type="application/javascript"
+          src="../common.js"></script>
+  <script type="application/javascript"
+          src="../name.js"></script>
+
+  <script type="application/javascript">
+    function testSources(aID, aAttr, aExpected) {
+      const acc = getAccessible(aID);
+      const sources = acc[aAttr].map(({ source, value, used }) => [
+        source,
+        value,
+        used,
+      ]);
+      isDeeply(sources, aExpected, `Wrong ${aAttr} for ${aID}`);
+    }
+
+    function doTest() {
+      testName("labelledby", "Label text");
+      testSources("labelledby", "nameSources", [
+        ["aria-labelledby", "Label text", true],
+        ["aria-label", "Ignored", false],
+        ["native", null, false],
+        ["contents", "Contents", false],
+        ["title", null, false],
+        ["content-alt", null, false],
+      ]);
+
+      testName("label", "Label");
+      testSources("label", "nameSources", [
+        ["aria-labelledby", null, false],
+        ["aria-label", "Label", true],
+        ["native", null, false],
+        ["contents", "Contents", false],
+        ["title", null, false],
+        ["content-alt", null, false],
+      ]);
+
+      testName("missingref", "Tip");
+      testSources("missingref", "nameSources", [
+        ["aria-labelledby", "", false],
+        ["aria-label", "", false],
+        ["native", null, false],
+        ["contents", null, false],
+        ["title", "Tip", true],
+        ["content-alt", null, false],
+      ]);
+
+      testName("native", "Native");
+      testSources("native", "nameSources", [
+        ["aria-labelledby", null, false],
+        ["aria-label", null, false],
+        ["native", "Native", true],
+        ["contents", null, false],
+        ["title", "Tip", false],
+        ["content-alt", null, false],
+      ]);
+
+      testName("contents", "Contents");
+      testSources("contents", "nameSources", [
+        ["aria-labelledby", null, false],
+        ["aria-label", null, false],
+        ["native", null, false],
+        ["contents", "Contents", true],
+        ["title", "Tip", false],
+        ["content-alt", null, false],
+      ]);
+
+      testName("cssalt", "Alt");
+      testSources("cssalt", "nameSources", [
+        ["aria-labelledby", null, false],
+        ["aria-label", null, false],
+        ["native", null, false],
+        ["contents", null, false],
+        ["title", null, false],
+        ["content-alt", "Alt", true],
+      ]);
+
+      // HTMLTextFieldAccessible::DirectName falls back to the placeholder.
+      testName("placeholder", "Search");
+      testSources("placeholder", "nameSources", [
+        ["aria-labelledby", null, false],
+        ["aria-label", null, false],
+        ["native", null, false],
+        ["element", "Search", true],
+        ["contents", null, false],
+        ["title", null, false],
+        ["content-alt", null, false],
+      ]);
+
+      testDescr("describedby", "Described");
+      testSources("describedby", "descriptionSources", [
+        ["aria-describedby", "Described", true],
+        ["aria-description", "Ignored", false],
+        ["native", null, false],
+        ["title", "Tip", false],
+      ]);
+
+      testDescr("contents", "Tip");
+      testSources("contents", "descriptionSources", [
+        ["aria-describedby", null, false],
+        ["aria-description", null, false],
+        ["native", null, false],
+        ["title", "Tip", true],
+      ]);
+
+      // A description matching the name isn't exposed.
+      testDescr("samedescr", "");
+      testSources("samedescr", "descriptionSources", [
+        ["aria-describedby", null, false],
+        ["aria-description", null, false],
+        ["native", null, false],
+        ["title", "Same", false],
+      ]);
+
+      SimpleTest.finish();
+    }
+
+    SimpleTest.waitForExplicitFinish();
+    addA11yLoadEvent(doTest);
+  </script>
+
+</head>
+
+<body>
+  <p id="display"></p>
+  <div id="content" style="display: none"></div>
+  <pre id="test">
+  </pre>
+
+  <button id="labelledby" aria-labelledby="labelledby_label"
+          aria-label="Ignored">Contents</button>
+  <span id="labelledby_label">Label text</span>
+
+  <button id="label" aria-label="Label">Contents</button>
+
+  <button id="missingref" aria-labelledby="nonexistent" aria-label=""
+          title="Tip"></button>
+
+  <label for="native">Native</label>
+  <input id="native" type="checkbox" title="Tip">
+
+  <button id="contents" title="Tip">Contents</button>
+
+  <h1 id="cssalt" style='content: url(../moz.png) / "Alt";'>Replaced</h1>
+
+  <input id="placeholder" placeholder="Search">
+
+  <button id="describedby" aria-describedby="describedby_descr"
+          aria-description="Ignored" title="Tip">Button</button>
+  <span id="describedby_descr">Described</span>
+
+  <button id="samedescr" title="Same"></button>
+</body>
+</html>

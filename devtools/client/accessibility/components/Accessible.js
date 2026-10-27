@@ -25,6 +25,7 @@ const {
 const {
   TREE_ROW_HEIGHT,
   ORDERED_PROPS,
+  TEXT_EQUIV_SOURCES_PROPS,
   ACCESSIBLE_EVENTS,
   VALUE_FLASHING_DURATION,
 } = require("resource://devtools/client/accessibility/constants.js");
@@ -497,7 +498,15 @@ const makeItemsForDetails = (props, parentPath) =>
     const path = `${parentPath}/${name}`;
     let contents = props[name];
 
-    if (contents) {
+    if (!parentPath && TEXT_EQUIV_SOURCES_PROPS.includes(name)) {
+      children = contents.map(({ source, value }) => ({
+        name: source,
+        path: `${path}/${source}`,
+        contents: value,
+        children: [],
+      }));
+      contents = contents.find(({ used }) => used)?.source ?? null;
+    } else if (contents) {
       if (isNodeFront(contents)) {
         contents = translateNodeFrontToGripWrapper(contents);
         name = "DOMNode";
@@ -543,6 +552,10 @@ const mapStateToProps = ({ details }) => {
         props.nodeFront = nodeFront;
       } else if (key === "relations") {
         props.relations = relations;
+      } else if (TEXT_EQUIV_SOURCES_PROPS.includes(key)) {
+        if (accessibleFront[key]) {
+          props[key] = accessibleFront[key];
+        }
       } else {
         props[key] = accessibleFront[key];
       }

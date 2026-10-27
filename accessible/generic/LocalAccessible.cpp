@@ -121,48 +121,222 @@ LocalAccessible::~LocalAccessible() {
   NS_ASSERTION(!mDoc, "LastRelease was never called!?!");
 }
 
+namespace mozilla::a11y {
+
+/**
+ * Evaluates the sources of a name or description in precedence order; the
+ * first source with text supplies the result. When recording, every source is
+ * evaluated and appended to the sources array, otherwise evaluation stops once
+ * the result is known.
+ */
+class TextEquivCascade {
+ public:
+  TextEquivCascade(nsString& aResult, nsTArray<TextEquivSource>* aSources)
+      : mResult(aResult),
+        mSources(aSources),
+        mStart(aSources ? aSources->Length() : 0) {}
+
+  bool Recording() const { return mSources; }
+  bool Resolved() const { return !mResult.IsEmpty(); }
+
+  /**
+   * Returns the buffer to fill with the text of the given source, or null if
+   * the source doesn't need evaluating. Each call must be paired with End().
+   */
+  nsString* Begin(const char* aSource) {
+    MOZ_ASSERT(!mInSource);
+    mInSource = true;
+    if (!mSources) {
+      mFillingResult = !Resolved();
+      return mFillingResult ? &mResult : nullptr;
+    }
+    TextEquivSource* source = mSources->AppendElement();
+    source->mSource = aSource;
+    return &source->mValue;
+  }
+
+  /**
+   * Ends the source started by Begin() and returns whether it supplied the
+   * result. aPresent records an empty value as empty rather than absent.
+   */
+  bool End(bool aPresent = false) {
+    MOZ_ASSERT(mInSource);
+    mInSource = false;
+    if (!mSources) {
+      bool supplied = mFillingResult && Resolved();
+      mFillingResult = false;
+      return supplied;
+    }
+    TextEquivSource& source = mSources->LastElement();
+    if (source.mValue.IsEmpty()) {
+      if (!aPresent) {
+        source.mValue.SetIsVoid(true);
+      }
+      return false;
+    }
+    if (Resolved()) {
+      return false;
+    }
+    mResult = source.mValue;
+    source.mUsed = true;
+    return true;
+  }
+
+  /**
+   * Drops the result, along with the mark on the source that supplied it.
+   */
+  void Discard() {
+    mResult.Truncate();
+    if (mSources) {
+      for (size_t i = mStart; i < mSources->Length(); i++) {
+        (*mSources)[i].mUsed = false;
+      }
+    }
+  }
+
+ private:
+  nsString& mResult;
+  nsTArray<TextEquivSource>* mSources;
+  size_t mStart;
+  bool mInSource = false;
+  bool mFillingResult = false;
+};
+
+}  // namespace mozilla::a11y
+
+static const char* TooltipSource(nsIContent* aContent) {
+  if (aContent && aContent->IsXULElement()) {
+    return "tooltiptext";
+  }
+  if (aContent && aContent->IsSVGElement()) {
+    return "desc";
+  }
+  return "title";
+}
+
+// Attributes the text to element-specific logic if a subclass override
+// produced different text to the base computation recorded from aStart.
+static void ApplyTextEquivOverride(nsTArray<TextEquivSource>& aSources,
+                                   size_t aStart, const nsString& aBase,
+                                   const nsString& aActual) {
+  if (aActual.Equals(aBase)) {
+    return;
+  }
+  for (size_t i = aStart; i < aSources.Length(); i++) {
+    aSources[i].mUsed = false;
+  }
+  if (!aActual.IsEmpty()) {
+    TextEquivSource* source = aSources.AppendElement();
+    source->mSource = "element";
+    source->mValue = aActual;
+    source->mUsed = true;
+  }
+}
+
 ENameValueFlag LocalAccessible::DirectName(nsString& aName) const {
-  if (!HasOwnContent()) return eNameOK;
+  TextEquivCascade cascade(aName, nullptr);
+  return ComputeDirectName(cascade);
+}
 
-  ENameValueFlag nameFlag = ARIAName(aName);
-  if (!aName.IsEmpty()) return nameFlag;
+ENameValueFlag LocalAccessible::ComputeDirectName(
+    TextEquivCascade& aCascade) const {
+  ENameValueFlag ariaFlag = ComputeARIAName(aCascade);
+  bool fromARIA = aCascade.Resolved();
 
-  nameFlag = NativeName(aName);
-  aName.CompressWhitespace();
+  ENameValueFlag nativeFlag = eNameOK;
+  if (nsString* native = aCascade.Begin("native")) {
+    if (HasOwnContent()) {
+      nativeFlag = NativeName(*native);
+      native->CompressWhitespace();
+    }
+  }
+  aCascade.End();
 
-  return nameFlag;
+  return fromARIA ? ariaFlag : nativeFlag;
 }
 
 ENameValueFlag LocalAccessible::Name(nsString& aName) const {
+  return ComputeName(aName, nullptr);
+}
+
+void LocalAccessible::NameSources(nsTArray<TextEquivSource>& aSources) const {
+  nsAutoString name;
+  ComputeName(name, &aSources);
+}
+
+ENameValueFlag LocalAccessible::ComputeName(
+    nsString& aName, nsTArray<TextEquivSource>* aSources) const {
   aName.Truncate();
 
   ENameValueFlag nameFlag = DirectName(aName);
-  if (!aName.IsEmpty()) return nameFlag;
-
-  nsTextEquivUtils::GetNameFromSubtree(this, aName);
-  if (!aName.IsEmpty()) return eNameFromSubtree;
-
-  // In the end get the name from tooltip.
-  if (Tooltip(aName)) {
-    return eNameFromTooltip;
+  if (aSources) {
+    size_t start = aSources->Length();
+    nsAutoString direct;
+    TextEquivCascade directCascade(direct, aSources);
+    ComputeDirectName(directCascade);
+    ApplyTextEquivOverride(*aSources, start, direct, aName);
+  } else if (!aName.IsEmpty()) {
+    return nameFlag;
   }
 
-  if (Maybe<nsString> cssAlt = nsCoreUtils::GetCssAltContent(mContent)) {
+  if (aName.IsEmpty()) {
+    nameFlag = eNameOK;
+  }
+
+  TextEquivCascade cascade(aName, aSources);
+  if (nsString* subtree = cascade.Begin("contents")) {
+    nsTextEquivUtils::GetNameFromSubtree(this, *subtree);
+  }
+  if (cascade.End()) {
+    nameFlag = eNameFromSubtree;
+  }
+
+  // In the end get the name from tooltip.
+  if (nsString* tooltip = cascade.Begin(TooltipSource(mContent))) {
+    Tooltip(*tooltip);
+  }
+  if (cascade.End()) {
+    nameFlag = eNameFromTooltip;
+  }
+
+  Maybe<nsString> cssAlt;
+  if (nsString* alt = cascade.Begin("content-alt")) {
     // This covers two cases:
     // 1. The CSS content property replaces the content of an element with an
     // image plus alt text.
     // 2. Alt text is provided for a pseudo-element image.
-    aName.Append(*cssAlt);
-    return eNameOK;
+    cssAlt = nsCoreUtils::GetCssAltContent(mContent);
+    if (cssAlt) {
+      alt->Append(*cssAlt);
+    }
+  }
+  cascade.End(cssAlt.isSome());
+
+  if (aName.IsEmpty() && !cssAlt) {
+    aName.SetIsVoid(true);
   }
 
-  aName.SetIsVoid(true);
-
-  return eNameOK;
+  return nameFlag;
 }
 
 EDescriptionValueFlag LocalAccessible::Description(
     nsString& aDescription) const {
+  return ComputeDescription(aDescription, nullptr);
+}
+
+void LocalAccessible::DescriptionSources(
+    nsTArray<TextEquivSource>& aSources) const {
+  size_t start = aSources.Length();
+  nsAutoString base;
+  ComputeDescription(base, &aSources);
+
+  nsAutoString description;
+  Description(description);
+  ApplyTextEquivOverride(aSources, start, base, description);
+}
+
+EDescriptionValueFlag LocalAccessible::ComputeDescription(
+    nsString& aDescription, nsTArray<TextEquivSource>* aSources) const {
   // There are 4 conditions that make an accessible have no accDescription:
   // 1. it's a text node; or
   // 2. It has no ARIA describedby or description property
@@ -172,28 +346,57 @@ EDescriptionValueFlag LocalAccessible::Description(
   EDescriptionValueFlag descFlag = eDescriptionOK;
   aDescription.Truncate();
 
-  if (!HasOwnContent() || mContent->IsText()) {
-    return descFlag;
-  }
+  dom::Element* elm = HasOwnContent() ? Elm() : nullptr;
+  TextEquivCascade cascade(aDescription, aSources);
 
-  if (ARIADescription(aDescription)) {
+  // aria-describedby takes precedence over aria-description
+  if (nsString* describedBy = cascade.Begin("aria-describedby")) {
+    if (elm) {
+      nsTextEquivUtils::GetTextEquivFromIDRefs(
+          this, nsGkAtoms::aria_describedby, *describedBy);
+      describedBy->CompressWhitespace();
+    }
+  }
+  if (cascade.End(cascade.Recording() && elm &&
+                  nsAccUtils::HasARIAAttr(elm, nsGkAtoms::aria_describedby))) {
     descFlag = eDescriptionFromARIA;
   }
 
-  if (aDescription.IsEmpty()) {
-    NativeDescription(aDescription);
-    aDescription.CompressWhitespace();
+  bool hasARIADescription = false;
+  if (nsString* ariaDescription = cascade.Begin("aria-description")) {
+    hasARIADescription =
+        elm && nsAccUtils::GetARIAAttr(elm, nsGkAtoms::aria_description,
+                                       *ariaDescription);
+    if (hasARIADescription) {
+      ariaDescription->CompressWhitespace();
+    }
+  }
+  if (cascade.End(hasARIADescription)) {
+    descFlag = eDescriptionFromARIA;
   }
 
-  if (aDescription.IsEmpty()) {
-    Tooltip(aDescription);
+  if (nsString* native = cascade.Begin("native")) {
+    if (elm) {
+      NativeDescription(*native);
+      native->CompressWhitespace();
+    }
   }
+  cascade.End();
+
+  if (nsString* tooltip = cascade.Begin(TooltipSource(mContent))) {
+    if (elm) {
+      Tooltip(*tooltip);
+    }
+  }
+  cascade.End();
 
   if (!aDescription.IsEmpty()) {
     nsAutoString name;
     Name(name);
     // Don't expose a description if it is the same as the name.
-    if (aDescription.Equals(name)) aDescription.Truncate();
+    if (aDescription.Equals(name)) {
+      cascade.Discard();
+    }
   }
 
   return descFlag;
@@ -2774,42 +2977,44 @@ void LocalAccessible::Shutdown() {
 
 // LocalAccessible protected
 ENameValueFlag LocalAccessible::ARIAName(nsString& aName) const {
-  // 'slot' elements should ignore aria-label and aria-labelledby.
-  if (mContent->IsHTMLElement(nsGkAtoms::slot)) {
-    return eNameOK;
-  }
-  // aria-labelledby now takes precedence over aria-label
-  bool notSimpleRelation = nsTextEquivUtils::GetTextEquivFromIDRefs(
-      this, nsGkAtoms::aria_labelledby, aName);
-  aName.CompressWhitespace();
-
-  if (!aName.IsEmpty()) {
-    return notSimpleRelation ? eNameOK : eNameFromRelations;
-  }
-
-  if (mContent->IsElement() &&
-      nsAccUtils::GetARIAAttr(mContent->AsElement(), nsGkAtoms::aria_label,
-                              aName)) {
-    aName.CompressWhitespace();
-  }
-
-  return eNameOK;
+  TextEquivCascade cascade(aName, nullptr);
+  return ComputeARIAName(cascade);
 }
 
 // LocalAccessible protected
-bool LocalAccessible::ARIADescription(nsString& aDescription) const {
-  // aria-describedby takes precedence over aria-description
-  nsTextEquivUtils::GetTextEquivFromIDRefs(this, nsGkAtoms::aria_describedby,
-                                           aDescription);
-  aDescription.CompressWhitespace();
+ENameValueFlag LocalAccessible::ComputeARIAName(
+    TextEquivCascade& aCascade) const {
+  // 'slot' elements should ignore aria-label and aria-labelledby.
+  dom::Element* elm =
+      HasOwnContent() && !mContent->IsHTMLElement(nsGkAtoms::slot) ? Elm()
+                                                                   : nullptr;
 
-  if (aDescription.IsEmpty() && mContent->IsElement() &&
-      nsAccUtils::GetARIAAttr(mContent->AsElement(),
-                              nsGkAtoms::aria_description, aDescription)) {
-    aDescription.CompressWhitespace();
+  // aria-labelledby now takes precedence over aria-label
+  ENameValueFlag nameFlag = eNameOK;
+  bool notSimpleRelation = false;
+  if (nsString* labelledBy = aCascade.Begin("aria-labelledby")) {
+    if (elm) {
+      notSimpleRelation = nsTextEquivUtils::GetTextEquivFromIDRefs(
+          this, nsGkAtoms::aria_labelledby, *labelledBy);
+      labelledBy->CompressWhitespace();
+    }
+  }
+  if (aCascade.End(aCascade.Recording() && elm &&
+                   nsAccUtils::HasARIAAttr(elm, nsGkAtoms::aria_labelledby))) {
+    nameFlag = notSimpleRelation ? eNameOK : eNameFromRelations;
   }
 
-  return !aDescription.IsEmpty();
+  bool hasLabel = false;
+  if (nsString* label = aCascade.Begin("aria-label")) {
+    hasLabel =
+        elm && nsAccUtils::GetARIAAttr(elm, nsGkAtoms::aria_label, *label);
+    if (hasLabel) {
+      label->CompressWhitespace();
+    }
+  }
+  aCascade.End(hasLabel);
+
+  return nameFlag;
 }
 
 // LocalAccessible protected

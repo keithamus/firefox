@@ -24,6 +24,10 @@ class AccessibleFront extends FrontClassWithSpec(accessibleSpec) {
     this.before("name-change", this.nameChange.bind(this));
     this.before("value-change", this.valueChange.bind(this));
     this.before("description-change", this.descriptionChange.bind(this));
+    this.before(
+      "text-equiv-sources-change",
+      this.textEquivSourcesChange.bind(this)
+    );
     this.before("shortcut-change", this.shortcutChange.bind(this));
     this.before("reorder", this.reorder.bind(this));
     this.before("text-change", this.textChange.bind(this));
@@ -48,12 +52,20 @@ class AccessibleFront extends FrontClassWithSpec(accessibleSpec) {
     return this._form.name;
   }
 
+  get nameSources() {
+    return this._form.nameSources;
+  }
+
   get value() {
     return this._form.value;
   }
 
   get description() {
     return this._form.description;
+  }
+
+  get descriptionSources() {
+    return this._form.descriptionSources;
   }
 
   get keyboardShortcut() {
@@ -114,6 +126,11 @@ class AccessibleFront extends FrontClassWithSpec(accessibleSpec) {
 
   descriptionChange(description) {
     this._form.description = description;
+  }
+
+  textEquivSourcesChange(nameSources, descriptionSources) {
+    this._form.nameSources = nameSources;
+    this._form.descriptionSources = descriptionSources;
   }
 
   shortcutChange(keyboardShortcut) {

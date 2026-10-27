@@ -240,6 +240,7 @@ class AccessibleActor extends Actor {
   }
 
   destroy() {
+    this.walker?.unwatchTextEquivSources(this);
     super.destroy();
     this.walker = null;
     this.rawAccessible = null;
@@ -271,6 +272,52 @@ class AccessibleActor extends Actor {
       return null;
     }
     return this.rawAccessible.description;
+  }
+
+  get nameSources() {
+    return this._getTextEquivSources("nameSources");
+  }
+
+  get descriptionSources() {
+    return this._getTextEquivSources("descriptionSources");
+  }
+
+  _getTextEquivSources(attribute) {
+    if (this.isDefunct) {
+      return null;
+    }
+
+    let sources;
+    try {
+      sources = this.rawAccessible[attribute];
+    } catch (e) {
+      if (e.result == Cr.NS_ERROR_NOT_IMPLEMENTED) {
+        // Not available for remote accessibles.
+        return null;
+      }
+      throw e;
+    }
+
+    return sources.map(({ source, value, used }) => ({ source, value, used }));
+  }
+
+  /**
+   * Emit the name and description sources if they changed since they were last
+   * sent.
+   */
+  refreshTextEquivSources() {
+    if (this.isDefunct) {
+      return;
+    }
+
+    const { nameSources, descriptionSources } = this;
+    const key = JSON.stringify([nameSources, descriptionSources]);
+    if (key === this._textEquivSourcesKey) {
+      return;
+    }
+
+    this._textEquivSourcesKey = key;
+    this.emit("text-equiv-sources-change", nameSources, descriptionSources);
   }
 
   get keyboardShortcut() {
@@ -498,9 +545,20 @@ class AccessibleActor extends Actor {
    *         actions, attributes, etc.
    */
   hydrate() {
+    const { nameSources, descriptionSources } = this;
+    this._textEquivSourcesKey = JSON.stringify([
+      nameSources,
+      descriptionSources,
+    ]);
+    if (nameSources) {
+      this.walker.watchTextEquivSources(this);
+    }
+
     return {
       value: this.value,
       description: this.description,
+      descriptionSources,
+      nameSources,
       keyboardShortcut: this.keyboardShortcut,
       domNodeType: this.domNodeType,
       indexInParent: this.indexInParent,

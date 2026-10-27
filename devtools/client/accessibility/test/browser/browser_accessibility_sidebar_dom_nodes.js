@@ -39,6 +39,7 @@ addA11YPanelTask(
     info("Check DOMNode");
     const domNodeEl = getPropertyItem(doc, "DOMNode");
     ok(domNodeEl, "The DOMNode item was retrieved");
+    domNodeEl.scrollIntoView();
 
     const openInspectorButton = domNodeEl.querySelector(".open-inspector");
     ok(openInspectorButton, "The open inspector button is displayed");
@@ -94,18 +95,3 @@ addA11YPanelTask(
     );
   }
 );
-
-function getPropertyItem(doc, label) {
-  const labelEl = Array.from(
-    doc.querySelectorAll("#accessibility-properties .object-label")
-  ).find(el => el.textContent === label);
-  if (!labelEl) {
-    return null;
-  }
-  return labelEl.closest(".node");
-}
-
-function getPropertyValue(doc, label) {
-  return getPropertyItem(doc, label)?.querySelector(".object-value")
-    ?.textContent;
-}

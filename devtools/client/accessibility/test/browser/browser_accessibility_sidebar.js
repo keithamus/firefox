@@ -26,10 +26,25 @@ const tests = [
     expected: {
       sidebar: {
         name: "Accessibility Panel Test",
+        nameSources: [
+          { source: "aria-labelledby", value: null, used: false },
+          { source: "aria-label", value: null, used: false },
+          { source: "native", value: null, used: false },
+          { source: "element", value: "Accessibility Panel Test", used: true },
+          { source: "contents", value: null, used: false },
+          { source: "title", value: null, used: false },
+          { source: "content-alt", value: null, used: false },
+        ],
         role: "document",
         actions: [],
         value: "",
         description: "",
+        descriptionSources: [
+          { source: "aria-describedby", value: null, used: false },
+          { source: "aria-description", value: null, used: false },
+          { source: "native", value: null, used: false },
+          { source: "title", value: null, used: false },
+        ],
         keyboardShortcut: "",
         childCount: 0,
         indexInParent: 0,

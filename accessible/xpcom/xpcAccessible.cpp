@@ -10,6 +10,7 @@
 #include "nsComponentManagerUtils.h"
 #include "nsIAccessibleRelation.h"
 #include "nsIAccessibleRole.h"
+#include "nsIAccessibleTextEquivSource.h"
 #include "nsIMutableArray.h"
 #include "nsPersistentProperties.h"
 #include "xpcAccessibleDocument.h"
@@ -248,6 +249,81 @@ xpcAccessible::GetDescription(nsAString& aDescription) {
   aDescription.Assign(desc);
 
   return NS_OK;
+}
+
+namespace {
+
+class xpcAccessibleTextEquivSource final : public nsIAccessibleTextEquivSource {
+ public:
+  NS_DECL_ISUPPORTS
+  NS_DECL_NSIACCESSIBLETEXTEQUIVSOURCE
+
+  explicit xpcAccessibleTextEquivSource(TextEquivSource&& aSource)
+      : mSource(std::move(aSource)) {}
+
+ private:
+  ~xpcAccessibleTextEquivSource() = default;
+
+  TextEquivSource mSource;
+};
+
+NS_IMPL_ISUPPORTS(xpcAccessibleTextEquivSource, nsIAccessibleTextEquivSource)
+
+NS_IMETHODIMP
+xpcAccessibleTextEquivSource::GetSource(nsACString& aSource) {
+  aSource.AssignASCII(mSource.mSource);
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+xpcAccessibleTextEquivSource::GetValue(nsAString& aValue) {
+  if (mSource.mValue.IsVoid()) {
+    aValue.SetIsVoid(true);
+  } else {
+    aValue.Assign(mSource.mValue);
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+xpcAccessibleTextEquivSource::GetUsed(bool* aUsed) {
+  *aUsed = mSource.mUsed;
+  return NS_OK;
+}
+
+}  // namespace
+
+using TextEquivSourcesGetter =
+    void (LocalAccessible::*)(nsTArray<TextEquivSource>&) const;
+
+static nsresult GetTextEquivSources(
+    Accessible* aAcc, TextEquivSourcesGetter aGetter,
+    nsTArray<RefPtr<nsIAccessibleTextEquivSource>>& aSources) {
+  if (!aAcc) return NS_ERROR_FAILURE;
+  if (aAcc->IsRemote()) return NS_ERROR_NOT_IMPLEMENTED;
+
+  nsTArray<TextEquivSource> sources;
+  (aAcc->AsLocal()->*aGetter)(sources);
+  aSources.SetCapacity(sources.Length());
+  for (TextEquivSource& source : sources) {
+    aSources.AppendElement(
+        MakeRefPtr<xpcAccessibleTextEquivSource>(std::move(source)));
+  }
+  return NS_OK;
+}
+
+NS_IMETHODIMP
+xpcAccessible::GetNameSources(
+    nsTArray<RefPtr<nsIAccessibleTextEquivSource>>& aSources) {
+  return GetTextEquivSources(IntlGeneric(), &LocalAccessible::NameSources,
+                             aSources);
+}
+
+NS_IMETHODIMP
+xpcAccessible::GetDescriptionSources(
+    nsTArray<RefPtr<nsIAccessibleTextEquivSource>>& aSources) {
+  return GetTextEquivSources(IntlGeneric(),
+                             &LocalAccessible::DescriptionSources, aSources);
 }
 
 NS_IMETHODIMP

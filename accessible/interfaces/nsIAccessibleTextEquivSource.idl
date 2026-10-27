@@ -1,0 +1,29 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+#include "nsISupports.idl"
+
+/**
+ * A source consulted when computing an accessible name or description.
+ */
+[scriptable, builtinclass, uuid(12d9876e-f98c-4e70-a437-dc371418b6a1)]
+interface nsIAccessibleTextEquivSource : nsISupports
+{
+  /**
+   * The kind of source, such as "aria-label", "native" or "contents".
+   * "element" denotes logic specific to the kind of element.
+   */
+  readonly attribute ACString source;
+
+  /**
+   * The text the source provides. Null when the source is absent, and empty
+   * when it is present but provides no text.
+   */
+  readonly attribute AString value;
+
+  /**
+   * Whether the computed text came from this source.
+   */
+  readonly attribute boolean used;
+};

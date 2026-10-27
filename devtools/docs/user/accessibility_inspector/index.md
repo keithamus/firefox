@@ -53,6 +53,8 @@ On the right-hand side, you can see further information about the currently sele
 
 - *name* — the item's name, as described above.
 
+- *nameSources* — the sources the browser checks when computing the name, in order of precedence: `aria-labelledby`, `aria-label`, `native` (native markup such as a `<label>`, `alt` attribute, `<caption>` or `<legend>`), `contents`, `title` and `content-alt` (alternative text given in the CSS `content` property). XUL elements list `tooltiptext` and SVG elements list `desc` in place of `title`. Each source shows the text it provides, `null` if it is absent, or an empty string if it is present but provides no text, such as an `aria-labelledby` that refers to a missing element. The value of *nameSources* itself is the source the name came from. A source named `element`, listed after `native`, means the name came from logic specific to that kind of element, such as an input's `placeholder`.
+
 - *role* — the item's role, as described above.
 
 - *actions* — a list of actions that can be performed on the item, for example, a pushbutton would have "Press" listed, while a link would have "Jump" listed.
@@ -66,6 +68,8 @@ On the right-hand side, you can see further information about the currently sele
   ```
 
 - *description* — any further description provided on the element, usually by the content of a title attribute.
+
+- *descriptionSources* — the sources the browser checks when computing the description, in order of precedence: `aria-describedby`, `aria-description`, `native` and `title`, shown in the same way as *nameSources*. A description that matches the name is not exposed, so no source is marked as used in that case.
 
 - *keyboardShortcut* — any keyboard shortcut that is available to activate the element, as specified in an `accessKey` attribute.
 

@@ -72,6 +72,19 @@ void TreeSize(const char* aTitle, const char* aMsgText, LocalAccessible* aRoot);
 typedef nsRefPtrHashtable<nsPtrHashKey<const void>, LocalAccessible>
     AccessibleHashtable;
 
+/**
+ * A source consulted when computing an accessible name or description.
+ * mValue is void when the source is absent, and empty when it is present but
+ * provides no text. mUsed is set on the source the computed text came from.
+ */
+struct TextEquivSource {
+  const char* mSource = nullptr;
+  nsString mValue;
+  bool mUsed = false;
+};
+
+class TextEquivCascade;
+
 #define NS_ACCESSIBLE_IMPL_IID                \
   {/* 133c8bf4-4913-4355-bd50-426bd1d6e1ad */ \
    0x133c8bf4,                                \
@@ -159,6 +172,17 @@ class LocalAccessible : public nsISupports, public Accessible {
   virtual ENameValueFlag Name(nsString& aName) const override final;
 
   virtual ENameValueFlag DirectName(nsString& aName) const;
+
+  /**
+   * Append the sources consulted when computing the name, in precedence order.
+   */
+  void NameSources(nsTArray<TextEquivSource>& aSources) const;
+
+  /**
+   * Append the sources consulted when computing the description, in
+   * precedence order.
+   */
+  void DescriptionSources(nsTArray<TextEquivSource>& aSources) const;
 
   /**
    * Maps ARIA state attributes to state of accessible. Note the given state
@@ -888,9 +912,20 @@ class LocalAccessible : public nsISupports, public Accessible {
   ENameValueFlag ARIAName(nsString& aName) const;
 
   /**
-   * Returns the accessible description specified by ARIA.
+   * Evaluate the ARIA or direct name sources into aCascade, in precedence
+   * order.
    */
-  bool ARIADescription(nsString& aDescription) const;
+  ENameValueFlag ComputeARIAName(TextEquivCascade& aCascade) const;
+  ENameValueFlag ComputeDirectName(TextEquivCascade& aCascade) const;
+
+  /**
+   * Compute the name or description, appending the sources consulted to
+   * aSources when it is non-null.
+   */
+  ENameValueFlag ComputeName(nsString& aName,
+                             nsTArray<TextEquivSource>* aSources) const;
+  EDescriptionValueFlag ComputeDescription(
+      nsString& aDescription, nsTArray<TextEquivSource>* aSources) const;
 
   /**
    * Returns the accessible "tooltip", usually derived from title attribute in

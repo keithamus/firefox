@@ -259,6 +259,8 @@ class AccessibleWalkerActor extends Actor {
     this.onFocusIn = this.onFocusIn.bind(this);
     this.onFocusOut = this.onFocusOut.bind(this);
     this.onHighlighterEvent = this.onHighlighterEvent.bind(this);
+    this._scheduleTextEquivSourcesRefresh =
+      this._scheduleTextEquivSourcesRefresh.bind(this);
   }
 
   get highlighter() {
@@ -422,6 +424,66 @@ class AccessibleWalkerActor extends Actor {
       this.refMap.delete(actor.rawAccessible);
     }
     Actor.prototype.unmanage.call(this, actor);
+  }
+
+  /**
+   * Keep the name and description sources of the given accessible up to date,
+   * replacing the accessible watched previously. Changes to a source that the
+   * name or description doesn't come from fire no accessible event, so the
+   * document is watched for mutations as well.
+   *
+   * @param {AccessibleActor} accessible
+   */
+  watchTextEquivSources(accessible) {
+    if (accessible === this._textEquivSourcesActor) {
+      return;
+    }
+    this.unwatchTextEquivSources();
+
+    const node = accessible.rawAccessible.DOMNode;
+    const doc = node?.ownerDocument ?? node;
+    if (!doc?.defaultView) {
+      return;
+    }
+
+    this._textEquivSourcesActor = accessible;
+    this._textEquivSourcesDocument = doc;
+    this._textEquivSourcesObserver = new doc.defaultView.MutationObserver(
+      this._scheduleTextEquivSourcesRefresh
+    );
+    this._textEquivSourcesObserver.observe(doc, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  /**
+   * Stop keeping the name and description sources up to date.
+   *
+   * @param {AccessibleActor} [accessible]
+   *        Only stop if this accessible is the one being watched.
+   */
+  unwatchTextEquivSources(accessible) {
+    if (accessible && accessible !== this._textEquivSourcesActor) {
+      return;
+    }
+    this._textEquivSourcesObserver?.disconnect();
+    this._textEquivSourcesObserver = null;
+    this._textEquivSourcesDocument = null;
+    this._textEquivSourcesActor = null;
+  }
+
+  _scheduleTextEquivSourcesRefresh() {
+    if (this._textEquivSourcesRefreshPending) {
+      return;
+    }
+    this._textEquivSourcesRefreshPending = true;
+    DevToolsUtils.executeSoon(() => {
+      this._textEquivSourcesRefreshPending = false;
+      this._textEquivSourcesActor?.refreshTextEquivSources();
+    });
   }
 
   /**
@@ -634,6 +696,13 @@ class AccessibleWalkerActor extends Actor {
     const event = subject.QueryInterface(Ci.nsIAccessibleEvent);
     const rawAccessible = event.accessible;
     const accessible = this.getRef(rawAccessible);
+
+    if (
+      this._textEquivSourcesActor &&
+      event.accessibleDocument?.DOMDocument === this._textEquivSourcesDocument
+    ) {
+      this._scheduleTextEquivSourcesRefresh();
+    }
 
     if (rawAccessible instanceof Ci.nsIAccessibleDocument && !accessible) {
       const rootDocAcc = this.getRawAccessibleFor(this.rootDoc);

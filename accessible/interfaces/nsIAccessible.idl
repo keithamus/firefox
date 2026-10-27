@@ -8,6 +8,7 @@
 interface nsIPersistentProperties;
 interface nsIAccessibleDocument;
 interface nsIAccessibleRelation;
+interface nsIAccessibleTextEquivSource;
 
 webidl Node;
 
@@ -132,6 +133,18 @@ interface nsIAccessible : nsISupports
    * Accessible description -- long text associated with this node
    */
   readonly attribute AString description;
+
+  /**
+   * The sources consulted when computing the name, in precedence order. Only
+   * available for local accessibles.
+   */
+  readonly attribute Array<nsIAccessibleTextEquivSource> nameSources;
+
+  /**
+   * The sources consulted when computing the description, in precedence
+   * order. Only available for local accessibles.
+   */
+  readonly attribute Array<nsIAccessibleTextEquivSource> descriptionSources;
 
   /**
    * Provides localized string of accesskey name, such as Alt+D.

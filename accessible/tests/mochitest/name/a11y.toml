@@ -17,6 +17,8 @@ support-files = [
 
 ["test_markup.html"]
 
+["test_sources.html"]
+
 ["test_svg.html"]
 
 ["test_tree.xhtml"]
