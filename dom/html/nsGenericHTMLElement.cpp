@@ -2189,7 +2189,8 @@ bool nsGenericHTMLFormElement::IsElementDisabledForEvents(WidgetEvent* aEvent,
       break;
   }
 
-  if (aEvent->mSpecifiedEventType == nsGkAtoms::oninput) {
+  if (aEvent->mSpecifiedEventType == nsGkAtoms::oninput ||
+      aEvent->mSpecifiedEventType == nsGkAtoms::oncancel) {
     return false;
   }
 

@@ -408,6 +408,9 @@ this.DateTimeBoxWidget = class {
   }
 
   setValueFromPicker(aValue) {
+    if (this.isDisabled()) {
+      return;
+    }
     if (aValue) {
       this.setFieldsFromPicker(aValue);
     } else {
@@ -457,6 +460,9 @@ this.DateTimeBoxWidget = class {
       ":scope > span.datetime-edit-field"
     )) {
       this.setFieldTabIndexAttribute(child);
+    }
+    if (this.isDisabled()) {
+      this.closeDateTimePicker();
     }
   }
 

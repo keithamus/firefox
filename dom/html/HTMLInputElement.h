@@ -158,6 +158,7 @@ class HTMLInputElement final : public TextControlElement,
   NS_IMETHOD SubmitNamesValues(FormData* aFormData) override;
 
   void FieldSetDisabledChanged(bool aNotify) override;
+  void UpdateDisabledState(bool aNotify) override;
 
   // nsIContent
   bool IsHTMLFocusable(IsFocusableFlags, bool* aIsFocusable,
@@ -273,6 +274,8 @@ class HTMLInputElement final : public TextControlElement,
 
   // Called when a nsIFilePicker or a nsIColorPicker terminate.
   void PickerClosed();
+  /** Whether the running picker was dismissed because this became disabled. */
+  bool PickerDismissed() const { return mPickerDismissed; }
 
   void SetCheckedChangedInternal(bool aCheckedChanged);
   bool GetCheckedChanged() const { return mCheckedChanged; }
@@ -1580,6 +1583,7 @@ class HTMLInputElement final : public TextControlElement,
   bool mNumberControlSpinnerIsSpinning : 1;
   bool mNumberControlSpinnerSpinsUp : 1;
   bool mPickerRunning : 1;
+  bool mPickerDismissed : 1;
   bool mIsPreviewEnabled : 1;
   bool mHasBeenTypePassword : 1;
   bool mHasPatternAttribute : 1;

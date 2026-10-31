@@ -276,4 +276,71 @@ add_task(async function test_disabled_change_on_blur() {
   }
   await SpecialPowers.popPrefEnv();
 });
+
+add_task(async function test_disabled_dismisses_file_picker() {
+  const MockFilePicker = SpecialPowers.MockFilePicker;
+  MockFilePicker.init();
+  MockFilePicker.useBlobFile();
+  MockFilePicker.returnValue = MockFilePicker.returnOK;
+  for (const inherited of [false, true]) {
+    const fieldset = document.createElement("fieldset");
+    const input = document.createElement("input");
+    input.type = "file";
+    fieldset.append(input);
+    document.body.append(fieldset);
+    const events = [];
+    for (const name of ["cancel", "change", "input"]) {
+      input.addEventListener(name, () => events.push(name));
+    }
+    const cancelled = new Promise(r => input.addEventListener("cancel", r, {once: true}));
+    const pickerClosed = new Promise(resolve => {
+      MockFilePicker.afterOpenCallback = resolve;
+    });
+    MockFilePicker.showCallback = () => {
+      ok(input.matches(":open"), "File picker is open");
+      (inherited ? fieldset : input).disabled = true;
+      ok(!input.matches(":open"), "Disabling dismisses the file picker");
+    };
+    SpecialPowers.wrap(document).notifyUserGestureActivation();
+    input.click();
+    await cancelled;
+    await pickerClosed;
+    is(input.files.length, 0, "Dismissed file picker leaves the selection unchanged");
+    is(events.join(","), "cancel", "Dismissal is processed as a cancel");
+    fieldset.remove();
+  }
+  MockFilePicker.cleanup();
+});
+
+add_task(async function test_disabled_dismisses_color_picker() {
+  await SpecialPowers.pushPrefEnv({set: [
+    ["dom.forms.html_color_picker.enabled", false],
+  ]});
+  const MockColorPicker = SpecialPowers.MockColorPicker;
+  MockColorPicker.init(window);
+  const input = document.createElement("input");
+  input.type = "color";
+  document.body.append(input);
+  const events = [];
+  for (const name of ["change", "input"]) {
+    input.addEventListener(name, () => events.push(name));
+  }
+  const pickerDone = new Promise(resolve => {
+    MockColorPicker.showCallback = (picker, update) => {
+      update("#111111");
+      input.disabled = true;
+      ok(!input.matches(":open"), "Disabling dismisses the color picker");
+      update("#222222");
+      SimpleTest.executeSoon(resolve);
+      return "#333333";
+    };
+  });
+  synthesizeMouseAtCenter(input, {});
+  await pickerDone;
+  is(input.value, "#111111", "Picker updates after dismissal are ignored");
+  is(events.join(","), "input", "Dismissed color picker does not commit");
+  input.remove();
+  MockColorPicker.cleanup();
+  await SpecialPowers.popPrefEnv();
+});
 </script>

@@ -166,6 +166,8 @@ skip-if = [
 
 ["browser_input_picker_color_scheme.js"]
 
+["browser_input_picker_disabled.js"]
+
 ["browser_isSynthetic.js"]
 
 ["browser_keyevents_during_autoscrolling.js"]

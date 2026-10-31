@@ -18,7 +18,10 @@ export class ColorPickerChild extends InputPickerChildCommon {
    */
   closeImpl(inputElement) {
     inputElement.setOpenState(false);
-    if (this.initialValue !== inputElement.value) {
+    if (
+      this.initialValue !== inputElement.value &&
+      !inputElement.matches(":disabled")
+    ) {
       // https://html.spec.whatwg.org/multipage/input.html#common-input-element-events
       // any time the user commits the change, the user agent must queue an element
       // task on the user interaction task source given the input element to set its
@@ -59,6 +62,7 @@ export class ColorPickerChild extends InputPickerChildCommon {
    */
   openPickerImpl(inputElement) {
     this.initialValue = inputElement.value;
+    inputElement.setOpenState(true);
     return { value: inputElement.getColor() };
   }
 }

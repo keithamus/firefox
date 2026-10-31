@@ -451,7 +451,12 @@ void GetDOMFileOrDirectoryPath(const OwningFileOrDirectory& aData,
 NS_IMETHODIMP
 HTMLInputElement::nsFilePickerShownCallback::Done(
     nsIFilePicker::ResultCode aResult) {
+  const bool dismissed = mInput->PickerDismissed();
   mInput->PickerClosed();
+
+  if (dismissed) {
+    return NS_OK;
+  }
 
   if (aResult == nsIFilePicker::returnCancel) {
     return nsContentUtils::DispatchTrustedEvent(
@@ -682,6 +687,9 @@ nsresult nsColorPickerShownCallback::UpdateInternal(const nsAString& aColor,
 
 NS_IMETHODIMP
 nsColorPickerShownCallback::Update(const nsAString& aColor) {
+  if (mInput->PickerDismissed()) {
+    return NS_OK;
+  }
   return UpdateInternal(aColor, true);
 }
 
@@ -696,7 +704,12 @@ nsColorPickerShownCallback::Done(const nsAString& aColor) {
    */
   nsresult rv = NS_OK;
 
+  const bool dismissed = mInput->PickerDismissed();
   mInput->PickerClosed();
+
+  if (dismissed) {
+    return NS_OK;
+  }
 
   if (!aColor.IsEmpty()) {
     UpdateInternal(aColor, false);
@@ -1158,6 +1171,7 @@ HTMLInputElement::HTMLInputElement(already_AddRefed<dom::NodeInfo> aNodeInfo,
       mNumberControlSpinnerIsSpinning(false),
       mNumberControlSpinnerSpinsUp(false),
       mPickerRunning(false),
+      mPickerDismissed(false),
       mHasBeenTypePassword(false),
       mHasPatternAttribute(false),
       mUserChangedSinceFocus(false),
@@ -1559,8 +1573,7 @@ void HTMLInputElement::AfterSetAttr(int32_t aNameSpaceID, nsAtom* aName,
       }
     } else if (CreatesDateTimeWidget()) {
       if (aName == nsGkAtoms::value || aName == nsGkAtoms::readonly ||
-          aName == nsGkAtoms::tabindex || aName == nsGkAtoms::required ||
-          aName == nsGkAtoms::disabled) {
+          aName == nsGkAtoms::tabindex || aName == nsGkAtoms::required) {
         // If original target is this and not the inner text control, we should
         // pass the focus to the inner text control.
         if (Element* dateTimeBoxElement = GetDateTimeBoxElement()) {
@@ -7320,6 +7333,46 @@ void HTMLInputElement::FieldSetDisabledChanged(bool aNotify) {
   UpdateValidityElementStates(aNotify);
 }
 
+void HTMLInputElement::UpdateDisabledState(bool aNotify) {
+  const bool wasDisabled = IsDisabled();
+  nsGenericHTMLFormControlElementWithState::UpdateDisabledState(aNotify);
+  const bool disabled = IsDisabled();
+  if (wasDisabled == disabled) {
+    return;
+  }
+  if (CreatesDateTimeWidget()) {
+    if (Element* dateTimeBoxElement = GetDateTimeBoxElement()) {
+      AsyncEventDispatcher::RunDOMEventWhenSafe(
+          *dateTimeBoxElement, u"MozDateTimeAttributeChanged"_ns,
+          CanBubble::eNo, ChromeOnlyDispatch::eNo);
+    }
+  }
+  if (disabled && mPickerRunning && !mPickerDismissed) {
+    mPickerDismissed = true;
+    SetOpenState(false);
+    if (mType == FormControlType::InputFile) {
+      OwnerDoc()->Dispatch(NS_NewRunnableFunction(
+          "HTMLInputElement::DismissFilePicker",
+          [self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+            nsContentUtils::DispatchTrustedEvent(
+                self, u"cancel"_ns, CanBubble::eYes, Cancelable::eNo);
+          }));
+    }
+  }
+  const bool closeColorPicker = disabled &&
+                                mType == FormControlType::InputColor &&
+                                State().HasState(ElementState::OPEN);
+  if (!closeColorPicker) {
+    return;
+  }
+  nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
+      "HTMLInputElement::UpdateDisabledState",
+      [self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+        nsContentUtils::DispatchChromeEvent(self, u"MozCloseColorPicker"_ns,
+                                            CanBubble::eYes, Cancelable::eYes);
+      }));
+}
+
 void HTMLInputElement::SetFilePickerFiltersFromAccept(
     nsIFilePicker* filePicker) {
   // We always add |filterAll|
@@ -7583,6 +7636,7 @@ void HTMLInputElement::UpdateHasRange(bool aNotify) {
 
 void HTMLInputElement::PickerClosed() {
   mPickerRunning = false;
+  mPickerDismissed = false;
   SetOpenState(false);
 }
 
