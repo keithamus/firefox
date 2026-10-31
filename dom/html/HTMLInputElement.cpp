@@ -3898,6 +3898,11 @@ nsresult HTMLInputElement::PostHandleEvent(EventChainPostVisitor& aVisitor) {
     // https://html.spec.whatwg.org/multipage/input.html#the-input-element:activation-behaviour
     preventDefault = true;
   }
+  if (StaticPrefs::dom_forms_retain_focus_on_disabled_enabled() &&
+      aVisitor.mEvent->AsKeyboardEvent() && IsDisabled()) {
+    UnsetFlags(HTML_ELEMENT_ACTIVE_FOR_KEYBOARD);
+    preventDefault = true;
+  }
 
   if (NS_SUCCEEDED(rv)) {
     WidgetKeyboardEvent* keyEvent = aVisitor.mEvent->AsKeyboardEvent();
