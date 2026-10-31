@@ -17,6 +17,7 @@
 #include "mozilla/MouseEvents.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/PresState.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_ui.h"
 #include "mozilla/TextEvents.h"
 #include "mozilla/dom/AncestorIterator.h"
@@ -44,11 +45,13 @@
 #include "nsContentCreatorFunctions.h"
 #include "nsContentUtils.h"
 #include "nsError.h"
+#include "nsFocusManager.h"
 #include "nsGenericHTMLElement.h"
 #include "nsGkAtoms.h"
 #include "nsIFrame.h"
 #include "nsLayoutUtils.h"
 #include "nsListControlFrame.h"
+#include "nsPIDOMWindow.h"
 #include "nsStyleConsts.h"
 
 #ifdef ACCESSIBILITY
@@ -1571,6 +1574,51 @@ void HTMLSelectElement::FieldSetDisabledChanged(bool aNotify) {
   UpdateValueMissingValidityState();
   UpdateBarredFromConstraintValidation();
   UpdateValidityElementStates(aNotify);
+}
+
+void HTMLSelectElement::UpdateDisabledState(bool aNotify) {
+  const bool wasDisabled = IsDisabled();
+  nsGenericHTMLFormControlElementWithState::UpdateDisabledState(aNotify);
+  if (wasDisabled || !IsDisabled()) {
+    return;
+  }
+  OwnerDoc()->Dispatch(NS_NewRunnableFunction(
+      "HTMLSelectElement::UpdateDisabledState",
+      [self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+        self->DismissPickerForDisabled();
+      }));
+}
+
+void HTMLSelectElement::DismissPickerForDisabled() {
+  if (!IsDisabled()) {
+    return;
+  }
+  if (!IsCombobox() || !IsBaseSelectAppearance()) {
+    if (OpenInParentProcess()) {
+      FireDropDownEvent(false, false);
+    }
+    return;
+  }
+  RefPtr<nsGenericHTMLElement> picker = GetPickerElement();
+  if (!picker) {
+    return;
+  }
+  if (StaticPrefs::dom_forms_retain_focus_on_disabled_enabled()) {
+    nsPIDOMWindowInner* win = OwnerDoc()->GetInnerWindow();
+    Element* focused = win ? win->GetFocusedElement() : nullptr;
+    nsIFrame* frame = GetPrimaryFrame(FlushType::Frames);
+    if (focused &&
+        nsContentUtils::ContentIsFlattenedTreeDescendantOf(focused, picker) &&
+        frame && frame->IsFocusable(IsFocusableFlags::IgnoreDisabled)) {
+      if (RefPtr<nsFocusManager> fm = nsFocusManager::GetFocusManager()) {
+        fm->SetFocus(this, nsIFocusManager::FLAG_ALLOWDISABLED |
+                               nsIFocusManager::FLAG_NOSCROLL);
+      }
+    }
+  }
+  IgnoredErrorResult rv;
+  picker->HidePopoverInternal(/* aFocusPreviousElement = */ false,
+                              /* aFireEvents = */ true, nullptr, rv);
 }
 
 void HTMLSelectElement::OnSelectionChanged() {

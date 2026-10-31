@@ -245,6 +245,7 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
   NS_IMETHOD SubmitNamesValues(FormData* aFormData) override;
 
   void FieldSetDisabledChanged(bool aNotify) override;
+  void UpdateDisabledState(bool aNotify) override;
 
   /**
    * Checks whether an option is disabled (even if it's part of an optgroup)
@@ -532,6 +533,7 @@ class HTMLSelectElement final : public nsGenericHTMLFormControlElementWithState,
 
   MOZ_CAN_RUN_SCRIPT void FireDropDownEvent(bool aShow,
                                             bool aIsSourceTouchEvent);
+  MOZ_CAN_RUN_SCRIPT void DismissPickerForDisabled();
 
   void ContentAppendedOrInserted(nsIContent* aFirstNewContent, bool aIsAppend);
 

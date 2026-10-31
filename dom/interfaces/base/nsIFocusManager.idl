@@ -209,6 +209,12 @@ interface nsIFocusManager : nsISupports
   const unsigned long FLAG_NONSYSTEMCALLER = 1 << 4;
 
   /**
+   * Allow focusing an element that is otherwise focusable but actually
+   * disabled.
+   */
+  const unsigned long FLAG_ALLOWDISABLED = 1 << 5;
+
+  /**
    * Focus is changing due to a mouse operation, for instance the mouse was
    * clicked on an element.
    */

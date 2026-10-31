@@ -5946,6 +5946,9 @@ static IsFocusableFlags FocusManagerFlagsToIsFocusableFlags(uint32_t aFlags) {
   if (aFlags & nsIFocusManager::FLAG_BYMOUSE) {
     flags |= IsFocusableFlags::WithMouse;
   }
+  if (aFlags & nsIFocusManager::FLAG_ALLOWDISABLED) {
+    flags |= IsFocusableFlags::IgnoreDisabled;
+  }
   return flags;
 }
 
