@@ -7362,15 +7362,33 @@ void HTMLInputElement::UpdateDisabledState(bool aNotify) {
   const bool closeColorPicker = disabled &&
                                 mType == FormControlType::InputColor &&
                                 State().HasState(ElementState::OPEN);
-  if (!closeColorPicker) {
+  const bool updateFormFill = State().HasState(ElementState::FOCUS);
+  if (!closeColorPicker && !updateFormFill) {
     return;
   }
   nsContentUtils::AddScriptRunner(NS_NewRunnableFunction(
       "HTMLInputElement::UpdateDisabledState",
-      [self = RefPtr{this}]() MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
-        nsContentUtils::DispatchChromeEvent(self, u"MozCloseColorPicker"_ns,
-                                            CanBubble::eYes, Cancelable::eYes);
-      }));
+      [self = RefPtr{this}, closeColorPicker, updateFormFill]()
+          MOZ_CAN_RUN_SCRIPT_BOUNDARY_LAMBDA {
+            if (closeColorPicker) {
+              nsContentUtils::DispatchChromeEvent(
+                  self, u"MozCloseColorPicker"_ns, CanBubble::eYes,
+                  Cancelable::eYes);
+            }
+            if (!updateFormFill) {
+              return;
+            }
+            nsCOMPtr<nsIFormFillController> controller =
+                do_GetService("@mozilla.org/satchel/form-fill-controller;1");
+            if (!controller) {
+              return;
+            }
+            RefPtr<Element> controlled;
+            controller->GetControlledElement(getter_AddRefs(controlled));
+            if (controlled == self) {
+              controller->SetControlledElement(self);
+            }
+          }));
 }
 
 void HTMLInputElement::SetFilePickerFiltersFromAccept(

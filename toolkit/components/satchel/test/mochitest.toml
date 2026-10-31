@@ -17,6 +17,8 @@ support-files = [
 
 ["test_datalist_attribute_change.html"]
 
+["test_datalist_disabled_change.html"]
+
 ["test_datalist_dynamic.html"]
 
 ["test_datalist_readonly_change.html"]

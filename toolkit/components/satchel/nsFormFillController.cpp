@@ -1328,9 +1328,9 @@ bool nsFormFillController::HasBeenTypePassword(
 
 bool nsFormFillController::ReadOnly(mozilla::dom::Element* aElement) const {
   if (auto* input = HTMLInputElement::FromNodeOrNull(aElement)) {
-    return input->ReadOnly();
+    return input->ReadOnly() || input->IsDisabled();
   } else if (auto* textarea = HTMLTextAreaElement::FromNodeOrNull(aElement)) {
-    return textarea->ReadOnly();
+    return textarea->ReadOnly() || textarea->IsDisabled();
   }
   return false;
 }

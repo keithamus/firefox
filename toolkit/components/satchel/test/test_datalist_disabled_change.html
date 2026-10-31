@@ -1,0 +1,58 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+  <title>Disabling a focused input dismisses its datalist suggestions</title>
+  <script src="/tests/SimpleTest/SimpleTest.js"></script>
+  <script src="/tests/SimpleTest/EventUtils.js"></script>
+  <script src="satchel_common.js"></script>
+  <link rel="stylesheet" href="/tests/SimpleTest/test.css" />
+</head>
+
+<body>
+  <fieldset>
+    <input list="suggest" type="text" name="field1">
+  </fieldset>
+  <datalist id="suggest">
+    <option value="First"></option>
+    <option value="Second"></option>
+  </datalist>
+<script>
+
+add_setup(async function () {
+  await SpecialPowers.pushPrefEnv({
+    set: [["dom.forms.retain_focus_on_disabled.enabled", true]],
+  });
+});
+
+for (const disabler of ["input", "fieldset"]) {
+  add_named_task(`disabled_via_${disabler}`, async () => {
+    const { input } = await openPopupOn("input");
+    assertAutocompleteItems("First", "Second");
+    synthesizeKey("KEY_ArrowDown");
+
+    document.querySelector(disabler).disabled = true;
+    await SimpleTest.promiseWaitForCondition(
+      async () => !(await getPopupState()).open,
+      "Disabling closes the suggestions popup"
+    );
+    is(document.activeElement, input, "Disabled input retains focus");
+
+    synthesizeKey("KEY_Enter");
+    is(input.value, "", "Dismissed suggestion is not committed");
+    await noPopupByArrowDown();
+
+    document.querySelector(disabler).disabled = false;
+    await new Promise(resolve => SimpleTest.executeSoon(resolve));
+    is(document.activeElement, input, "Re-enabled input is still focused");
+    await openPopupOn(input);
+    assertValueAfterKeys(input, ["KEY_ArrowDown", "KEY_Enter"], "First");
+    input.value = "";
+    input.blur();
+  });
+}
+
+</script>
+</body>
+
+</html>
