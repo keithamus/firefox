@@ -25,6 +25,7 @@
 #include "mozilla/PresShell.h"
 #include "mozilla/Services.h"
 #include "mozilla/StaticPrefs_accessibility.h"
+#include "mozilla/StaticPrefs_dom.h"
 #include "mozilla/StaticPrefs_full_screen_api.h"
 #include "mozilla/dom/BrowserBridgeChild.h"
 #include "mozilla/dom/BrowserParent.h"
@@ -3743,9 +3744,15 @@ nsresult nsFocusManager::DetermineElementToMoveFocus(
   bool startingFromDescendantOfFocusedContent = false;
   if (startContent) {
     nsIFrame* frame = startContent->GetPrimaryFrame();
-    tabIndex = (frame && !startContent->IsHTMLElement(nsGkAtoms::area))
-                   ? frame->IsFocusable().mTabIndex
-                   : startContent->IsFocusableWithoutStyle().mTabIndex;
+    auto startFlags = IsFocusableFlags(0);
+    if (!aStartContent &&
+        StaticPrefs::dom_forms_retain_focus_on_disabled_enabled()) {
+      startFlags |= IsFocusableFlags::IgnoreDisabled;
+    }
+    tabIndex =
+        (frame && !startContent->IsHTMLElement(nsGkAtoms::area))
+            ? frame->IsFocusable(startFlags).mTabIndex
+            : startContent->IsFocusableWithoutStyle(startFlags).mTabIndex;
 
     if (!aStartContent &&
         (aType == MOVEFOCUS_FORWARD || aType == MOVEFOCUS_BACKWARD)) {
